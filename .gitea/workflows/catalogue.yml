@@ -1,0 +1,44 @@
+name: catalogue
+
+on:
+  push:
+    paths:
+      - 'scan.py'
+      - '.gitea/workflows/catalogue.yml'
+  schedule:
+    # twice a day, UTC
+    - cron: '0 5,17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalogue
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Scan the Nespresso catalogue
+        run: |
+          python3 scan.py --selftest
+          python3 scan.py
+
+      - name: Commit the catalogue if it changed
+        run: |
+          git config user.name "nespresso-scanner"
+          git config user.email "nespresso-scanner@users.noreply.git.khmls.net"
+          if git diff --quiet -- catalogue.json; then
+            echo "catalogue unchanged"
+            exit 0
+          fi
+          git add catalogue.json
+          git commit -m "catalogue: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
