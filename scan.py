@@ -31,6 +31,8 @@ LANG = "de"
 PREFIX = f"/{MARKET}/{LANG}"
 UA = "nespresso-scanner/0.1 (+https://git.khmls.net/klein/nespresso-scanner)"
 OUT = Path(__file__).resolve().parent / "catalogue.json"
+IMAGES = Path(__file__).resolve().parent / "images"
+RAW_BASE = "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main"
 
 # Refuse to overwrite a good catalogue with a broken haul: fewer than this many
 # capsules, or more than this share of product pages failing, is an outage, not
@@ -213,6 +215,14 @@ def scan(workers: int = 4) -> tuple[dict, int]:
         raise SystemExit(f"{errors}/{len(urls)} product pages failed — refusing to write")
     if len(entries) < MIN_ENTRIES:
         raise SystemExit(f"only {len(entries)} capsules parsed from {len(urls)} URLs — refusing to write")
+
+    # A generated banner (images.py) wins over the store photo; keep the store photo as
+    # source_image so colour/provenance is not lost.
+    generated = {p.stem for p in IMAGES.glob("*.png")}
+    for entry, _ in entries.values():
+        if entry["sku"] in generated:
+            entry["source_image"] = entry["image"]
+            entry["image"] = f"{RAW_BASE}/images/{entry['sku']}.png"
 
     capsules = sorted((e for e, _ in entries.values()), key=lambda c: (c["line"], c["family"], c["name"]))
     doc = {

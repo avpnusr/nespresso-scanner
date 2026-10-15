@@ -43,7 +43,8 @@ than 10% of product pages failing aborts the run and leaves the old file alone.
       "available": true,            // orderable right now
       "price": 0.52,
       "url": "https://www.nespresso.com/de/de/order/capsules/vertuo/...",
-      "image": "https://www.nespresso.com/ecom/medias/..."
+      "image": "https://www.nespresso.com/ecom/medias/...",
+      "source_image": "https://www.nespresso.com/ecom/medias/..."  // set when a generated banner exists
     }
   ]
 }
@@ -53,6 +54,14 @@ than 10% of product pages failing aborts the run and leaves the old file alone.
 is the store's display name, which Nespresso changes from time to time — the
 dashboard's existing seed uses older names (e.g. `Ispirazione Firenze Arpeggio`
 where the store now says `Arpeggio`), so match on `sku` or allow aliases.
+`image` is the picture a client shows; once a capsule has a generated banner
+(`images/<sku>.png`) it points there and the store photo moves to `source_image`.
+
+## Images
+
+Capsule banners are AI-generated in a fixed style, one per capsule, under
+`images/<sku>.png`. `images.py` writes the ChatGPT prompts for capsules that
+still need one and installs the results — see [prompts/README.md](prompts/README.md).
 
 ## Refreshing
 

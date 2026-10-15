@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'scan.py'
+      - 'images.py'
       - '.gitea/workflows/catalogue.yml'
   schedule:
     # twice a day, UTC
@@ -27,18 +28,29 @@ jobs:
           token: ${{ secrets.GITEA_TOKEN }}
 
       - name: Scan the Nespresso catalogue
+        env:
+          STATS_CATALOGUE_URL: https://git.khmls.net/klein/nespresso-stats/raw/branch/main/capsules.json
         run: |
           python3 scan.py --selftest
           python3 scan.py
+          python3 images.py --selftest
+          # Refresh the list of capsules still needing a banner, skipping the ones the
+          # dashboard already has its own picture for.
+          if curl -fsS "$STATS_CATALOGUE_URL" -o /tmp/known.json \
+             && python3 -c "import json; json.load(open('/tmp/known.json'))"; then
+            python3 images.py prompts --known /tmp/known.json
+          else
+            echo "dashboard catalogue unavailable; keeping the existing prompt list"
+          fi
 
       - name: Commit the catalogue if it changed
         run: |
           git config user.name "nespresso-scanner"
           git config user.email "nespresso-scanner@users.noreply.git.khmls.net"
-          if git diff --quiet -- catalogue.json; then
-            echo "catalogue unchanged"
+          git add catalogue.json prompts/needs-images.md
+          if git diff --cached --quiet; then
+            echo "nothing changed"
             exit 0
           fi
-          git add catalogue.json
           git commit -m "catalogue: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
           git push
