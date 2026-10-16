@@ -37,6 +37,7 @@ import unicodedata
 import urllib.error
 import urllib.request
 import uuid
+import warnings
 from datetime import date
 from pathlib import Path
 
@@ -157,6 +158,10 @@ def dominant_colour(png: bytes) -> tuple[int, int, int] | None:
     except ImportError:
         return None
     with Image.open(io.BytesIO(png)) as img:
+        # a bytes "transparency" is per-entry palette alpha; Pillow warns on a direct
+        # convert("RGB") and asks for RGBA, which samples the same visible pixels
+        if isinstance(img.info.get("transparency"), bytes):
+            img = img.convert("RGBA")
         img = img.convert("RGB")
         img.thumbnail((64, 64))
         r = g = b = n = 0
@@ -447,6 +452,16 @@ def selftest() -> None:
                 img.putpixel((x, y), (137, 184, 131))
         img.save(pack, "PNG")
         assert dominant_colour(pack.getvalue()) == (137, 184, 131)
+        # a palette packshot with bytes transparency must not warn on that convert
+        pal = Image.new("P", (64, 64))
+        pal.putpalette([255, 255, 255, 137, 184, 131] + [0, 0, 0] * 254)
+        pal.paste(1, (16, 8, 48, 56))
+        pal.info["transparency"] = bytes([0, 255, 0])
+        pack = io.BytesIO()
+        pal.save(pack, "PNG")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert dominant_colour(pack.getvalue()) == (137, 184, 131)
     # ingest keys a downloaded banner by sku and rewrites the catalogue fields
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
