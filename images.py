@@ -114,10 +114,87 @@ def store_photo(entry: dict) -> str:
     return entry.get("source_image") or entry.get("image") or ""
 
 
-def prompt_for(entry: dict) -> str:
+# The image model invents a colour from the capsule's name when nothing pins it (the
+# Festive banners came out champagne/violet/brown instead of the real green/blue/pink),
+# so the prompt states the colour sampled from the store photo, by word and by hex.
+NAMED_COLOURS = [
+    ((0x3a, 0x3a, 0x3a), "charcoal grey"),
+    ((0x4a, 0x2c, 0x1a), "dark chocolate brown"),
+    ((0x6b, 0x42, 0x26), "deep warm brown"),
+    ((0xa1, 0x67, 0x30), "caramel bronze"),
+    ((0xd9, 0xb9, 0x81), "champagne gold"),
+    ((0xef, 0xe0, 0xc8), "cream"),
+    ((0xb8, 0xb8, 0xb8), "silver"),
+    ((0x6e, 0x24, 0x36), "burgundy"),
+    ((0xa3, 0x40, 0x2e), "brick red"),
+    ((0xc9, 0x6f, 0x45), "terracotta"),
+    ((0x75, 0x98, 0x08), "olive green"),
+    ((0x3d, 0x52, 0x26), "dark forest green"),
+    ((0x89, 0xb8, 0x83), "soft sage green"),
+    ((0x2e, 0x8b, 0x57), "emerald green"),
+    ((0x2a, 0x7f, 0x76), "teal"),
+    ((0x5b, 0x7d, 0x99), "steel blue"),
+    ((0x80, 0x9b, 0xb3), "dusty sky blue"),
+    ((0x22, 0x34, 0x4f), "navy blue"),
+    ((0x5a, 0x4a, 0x8a), "indigo violet"),
+    ((0x7a, 0x4a, 0x8f), "purple"),
+    ((0xb2, 0x79, 0x90), "dusty rose pink"),
+    ((0xe0, 0x7a, 0x9a), "bright pink"),
+]
+
+
+def colour_name(rgb: tuple[int, int, int]) -> str:
+    """Nearest named colour — a prompt-friendly word for a sampled hex."""
+    r, g, b = rgb
+    return min(NAMED_COLOURS,
+               key=lambda c: (r - c[0][0]) ** 2 + (g - c[0][1]) ** 2 + (b - c[0][2]) ** 2)[1]
+
+
+def dominant_colour(png: bytes) -> tuple[int, int, int] | None:
+    """The capsule's own colour, averaged from the store packshot, skipping the white
+    background, shadows and black barcode flange. Pillow is a generator-only need, so a
+    missing install just means no colour pin in the prompt."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    with Image.open(io.BytesIO(png)) as img:
+        img = img.convert("RGB")
+        img.thumbnail((64, 64))
+        r = g = b = n = 0
+        for px in img.getdata():
+            if min(px) > 210 or max(px) < 35:
+                continue
+            r += px[0]
+            g += px[1]
+            b += px[2]
+            n += 1
+    if not n:
+        return None
+    return r // n, g // n, b // n
+
+
+def prompt_for(entry: dict, colour: tuple[int, int, int] | None = None) -> str:
+    """The banner prompt: the template names the capsule and the series; the taste text
+    from the product page steers the scene, and a sampled colour stops the model from
+    inventing one from the name."""
     line = entry.get("line") or "vertuo"
     template = ORIGINAL if line == "original" else VERTUO
-    return template.format(name=(entry.get("name") or "").upper())
+    prompt = template.format(name=(entry.get("name") or "").upper())
+    profile = (entry.get("description") or "").strip()
+    if profile:
+        prompt += f" Flavour and origin from the Nespresso product page: {profile}"
+        ingredients = (entry.get("ingredients") or "").strip()
+        if ingredients:
+            prompt += f" (ingredients: {ingredients})"
+        prompt += "."
+    if colour:
+        r, g, b = colour
+        prompt += (f" The capsule's colour is {colour_name(colour)}"
+                   f" (#{r:02x}{g:02x}{b:02x}), sampled from the attached store photo —"
+                   " the photo is the capsule itself, so recreate the scene around it and"
+                   " never invent or shift its colour from the capsule's name.")
+    return prompt
 
 
 def fetch(url: str) -> bytes:
@@ -225,6 +302,10 @@ def generate(entries: list[dict], limit: int, key: str, *, dry_run: bool = False
             print(f"{entry.get('sku')}  {entry.get('name')}: store photo unavailable ({exc}); skipped")
             continue
         print(f"{entry.get('sku')}  {entry.get('name')}  ({len(files)} reference(s))")
+        store = next((data for name, data in files if name == "store.png"), None)
+        colour = dominant_colour(store) if store else None
+        if colour:
+            print(f"  colour pin: #{colour[0]:02x}{colour[1]:02x}{colour[2]:02x} {colour_name(colour)}")
         if dry_run:
             continue
         if not files:
@@ -232,7 +313,7 @@ def generate(entries: list[dict], limit: int, key: str, *, dry_run: bool = False
             continue
         # ingest() keys a banner by its file name, so stage it as <sku>.png
         staged = Path(tempfile.mkdtemp()) / f"{entry['sku']}.png"
-        staged.write_bytes(banner(edit(prompt_for(entry), files, key, size, quality, model)))
+        staged.write_bytes(banner(edit(prompt_for(entry, colour), files, key, size, quality, model)))
         installed += ingest([staged])
     return installed
 
@@ -329,6 +410,19 @@ def selftest() -> None:
     original = {"sku": "7928.20", "name": "Arpeggio", "line": "original", "family": "Espresso"}
     assert "MELOZIO" in prompt_for(vertuo) and "VERTUO" in prompt_for(vertuo)
     assert "ORIGINAL" in prompt_for(original) and "truncated-cone" in prompt_for(original)
+    # the taste and ingredient text from the product page steers the scene…
+    entry = {"name": "Crystal Spark", "line": "vertuo",
+             "description": "geb\u00e4ckartigen und fruchtigen Noten",
+             "ingredients": "Gemahlener R\u00f6stkaffee"}
+    p = prompt_for(entry)
+    assert "geb\u00e4ckartigen und fruchtigen Noten" in p and "Gemahlener R\u00f6stkaffee" in p
+    assert "Flavour" not in prompt_for({"name": "X", "line": "vertuo"})
+    # …and a sampled colour pins the capsule, so the model cannot invent one from the name
+    assert colour_name((0x89, 0xb8, 0x83)) == "soft sage green"
+    assert colour_name((0x6b, 0x42, 0x26)) == "deep warm brown"
+    assert "colour is soft sage green (#89b883)" in prompt_for({"name": "X", "line": "vertuo"},
+                                                                 (0x89, 0xb8, 0x83))
+    assert "#89b883" not in prompt_for({"name": "X", "line": "vertuo"})
     # the per-run cap is per line, so a long Original backlog cannot starve Vertuo
     backlog = ([{"sku": f"o{i}", "line": "original", "name": f"o{i}"} for i in range(5)]
                + [{"sku": f"v{i}", "line": "vertuo", "name": f"v{i}"} for i in range(3)])
@@ -351,6 +445,17 @@ def selftest() -> None:
         Image.new("RGB", (1824, 864)).save(drawn, "PNG")
         with Image.open(io.BytesIO(banner(drawn.getvalue()))) as scaled:
             assert scaled.size == BANNER_SIZE, scaled.size
+        # the packshot's white background must not wash out the sampled capsule colour
+        pack = io.BytesIO()
+        Image.new("RGB", (64, 64), (255, 255, 255)).save(pack, "PNG")
+        assert dominant_colour(pack.getvalue()) is None, "a blank packshot pins no colour"
+        pack = io.BytesIO()
+        img = Image.new("RGB", (64, 64), (255, 255, 255))
+        for x in range(16, 48):
+            for y in range(8, 56):
+                img.putpixel((x, y), (137, 184, 131))
+        img.save(pack, "PNG")
+        assert dominant_colour(pack.getvalue()) == (137, 184, 131)
     # ingest keys a downloaded banner by sku and rewrites the catalogue fields
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
@@ -408,6 +513,9 @@ def main() -> None:
     p_generate.add_argument("--limit", type=int, default=2, help="how many banners to draw per line (default 2)")
     p_generate.add_argument("--line", choices=("vertuo", "original"),
                             help="only this line (default: both)")
+    p_generate.add_argument("--sku", action="append", default=[], metavar="SKU",
+                            help="draw only these sku(s), overwriting their banners"
+                                 " (ignores the cost filter and the per-line cap)")
     p_generate.add_argument("--all", action="store_true",
                             help="draw for every capsule without a banner, not just ones the dashboard lacks")
     p_generate.add_argument("--known", type=Path, default=STATS_CATALOGUE,
@@ -438,14 +546,21 @@ def main() -> None:
         key = os.environ.get("OPENAI_API_KEY", "")
         if not key and not args.dry_run:
             raise SystemExit("set OPENAI_API_KEY to draw banners")
-        # the dashboard catalogue is only a cost filter, so a missing one means more work, not an error
-        known, every = (load_known(args.known), False) if args.known.exists() and not args.all else (set(), True)
-        entries = [e for e in needs_image(known, every)
-                   if not args.line or (e.get("line") or "vertuo") == args.line]
-        count = generate(entries, args.limit, key, dry_run=args.dry_run, size=args.size,
+        if args.sku:
+            wanted = set(args.sku)
+            entries = [e for e in json.loads(CATALOGUE.read_text())["capsules"]
+                       if e.get("sku") in wanted]
+            limit = len(entries)  # --sku names exactly what to (re)draw, no per-line cap
+        else:
+            # the dashboard catalogue is only a cost filter, so a missing one means more work, not an error
+            known, every = (load_known(args.known), False) if args.known.exists() and not args.all else (set(), True)
+            entries = [e for e in needs_image(known, every)
+                       if not args.line or (e.get("line") or "vertuo") == args.line]
+            limit = args.limit
+        count = generate(entries, limit, key, dry_run=args.dry_run, size=args.size,
                          quality=args.quality, model=args.model)
         if args.dry_run:
-            print(f"{len(per_line(entries, args.limit))} of {len(entries)} capsule(s) would be drawn")
+            print(f"{len(per_line(entries, limit))} of {len(entries)} capsule(s) would be drawn")
         else:
             print(f"installed {count} banner(s) into {IMAGES.relative_to(ROOT)}")
     elif args.command == "ingest":

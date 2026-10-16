@@ -141,6 +141,25 @@ def product_from_page(html: str) -> dict | None:
     return None
 
 
+def clean_text(text: str) -> str:
+    """Strip the zero-width chars Nespresso sprinkles into its texts, and any HTML."""
+    return re.sub(r"<[^>]+>", "", (text or "").replace("\u200b", "").replace("\u00ad", "")).strip()
+
+
+def ingredients_text(product: dict) -> str:
+    """The 'Zutaten' section's list — the flavour cues an image scene can lean on."""
+    sections = product.get("ingredients") or []
+    for i, section in enumerate(sections):
+        if ((section.get("type") or {}).get("code") == "TITLE"
+                and (section.get("text") or "").strip().lower() in ("zutaten", "ingredients")):
+            for after in sections[i + 1:]:
+                if (after.get("type") or {}).get("code") == "DESCRIPTION":
+                    text = clean_text(after.get("text"))
+                    # the list is one sentence; the next ones are nutrition small print
+                    return text.split(".", 1)[0] + "." if "." in text else text
+    return ""
+
+
 def entry_from_product(product: dict) -> dict | None:
     tech = " ".join(product.get("technologies") or [])
     line = "vertuo" if "vertuo" in tech else "original" if "original" in tech else None
@@ -166,6 +185,11 @@ def entry_from_product(product: dict) -> dict | None:
         "family": family_for(cups, line),
         "intensity": int(product.get("intensity") or 0),
         "special": "limited-edition" in url or any("limited-edition" in r for r in ranges),
+        # the banner generator leans on these for the scene; without them the image model
+        # invents colours and flavours from the capsule's name alone
+        "description": clean_text(product.get("aromaticProfileDescription")
+                                  or product.get("description")),
+        "ingredients": ingredients_text(product),
         "available": bool(product.get("available") and product.get("inStock")),
         "price": round(float(product.get("price") or 0), 2),
         "url": urllib.parse.urljoin(BASE, url),
@@ -287,6 +311,9 @@ def selftest() -> None:
         '<html><script>window.ui.push({"configuration":{"eCommerceData":{"product":'
         '{"id":"erp.de.b2c/prod/7048.20","internationalId":"7048.20","name":"Altissio\u200b",'
         '"type":"capsule","intensity":9,"price":0.52,"available":true,"inStock":true,'
+        '"aromaticProfileDescription":"Intensiv und w\u00fcrzig\u200b",'
+        '"ingredients":[{"type":{"code":"TITLE"},"text":"Zutaten"},'
+        '{"type":{"code":"DESCRIPTION"},"text":"Gemahlener <strong>R\u00f6stkaffee</strong>"}],'
         '"url":"/de/de/order/capsules/vertuo/altissio","image":{"url":"/ecom/x.png"},'
         '"technologies":["nesclub2.de.b2c/machineTechno/vertuo"],'
         '"cupSizes":["nesclub2.de.b2c/cat/capsule-cupSize-espresso-vertuo"],'
@@ -301,6 +328,8 @@ def selftest() -> None:
         "family": "Espresso",
         "intensity": 9,
         "special": False,
+        "description": "Intensiv und würzig",
+        "ingredients": "Gemahlener Röstkaffee",
         "available": True,
         "price": 0.52,
         "url": f"{BASE}/de/de/order/capsules/vertuo/altissio",
@@ -311,6 +340,16 @@ def selftest() -> None:
     assert family_for(["coffee", "milk"], "vertuo") == "Mug"
     assert family_for(["cappuccino-and-latte-macchiato"], "original") == "Espresso"
     assert clean_name("Hazelnut\n Brownie\u200b  Coffee ") == "Hazelnut Brownie Coffee"
+    # clean_text strips HTML and the zero-width chars the page sprinkles in
+    assert clean_text("<strong>Kakao</strong>\u200b") == "Kakao"
+    assert ingredients_text({"ingredients": [
+        {"type": {"code": "TITLE"}, "text": "Inhalt"},
+        {"type": {"code": "DESCRIPTION"}, "text": "10 Kapseln"}]}) == ""
+    assert ingredients_text({"ingredients": [
+        {"type": {"code": "TITLE"}, "text": "Zutaten"},
+        {"type": {"code": "DESCRIPTION"},
+            "text": "R\u00f6stkaffee, nat\u00fcrliches Aroma. Enth\u00e4lt geringf\u00fcgige Mengen von Energie."}]}) \
+        == "Röstkaffee, natürliches Aroma."
     assert capsule_urls('<a href="/de/de/order/capsules/vertuo/x">y</a>') == [
         f"{BASE}/de/de/order/capsules/vertuo/x"
     ]
