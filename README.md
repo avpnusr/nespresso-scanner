@@ -43,8 +43,8 @@ than 10% of product pages failing aborts the run and leaves the old file alone.
       "available": true,            // orderable right now
       "price": 0.52,
       "url": "https://www.nespresso.com/de/de/order/capsules/vertuo/...",
-      "image": "https://www.nespresso.com/ecom/medias/...",
-      "source_image": "https://www.nespresso.com/ecom/medias/..."  // set when a generated banner exists
+      "image": "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main/images/7048.20.png",
+      "source_image": "https://www.nespresso.com/ecom/medias/..."
     }
   ]
 }
@@ -54,8 +54,10 @@ than 10% of product pages failing aborts the run and leaves the old file alone.
 is the store's display name, which Nespresso changes from time to time — the
 dashboard's existing seed uses older names (e.g. `Ispirazione Firenze Arpeggio`
 where the store now says `Arpeggio`), so match on `sku` or allow aliases.
-`image` is the picture a client shows; once a capsule has a generated banner
-(`images/<sku>.png`) it points there and the store photo moves to `source_image`.
+`image` is the picture a client shows and is always an AI-generated banner
+(`images/<sku>.png`). `source_image` is the Nespresso store photo, kept only as a
+reference for the generator. A capsule without a generated banner yet has no
+`image` at all, so a client never falls back to a Nespresso picture.
 
 ## Images
 

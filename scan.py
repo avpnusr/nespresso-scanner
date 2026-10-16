@@ -193,7 +193,9 @@ def entry_from_product(product: dict) -> dict | None:
         "available": bool(product.get("available") and product.get("inStock")),
         "price": round(float(product.get("price") or 0), 2),
         "url": urllib.parse.urljoin(BASE, url),
-        "image": urllib.parse.urljoin(BASE, image),
+        # the store photo is only a reference for the banner generator; `image` is
+        # reserved for the AI banner and set below once one exists (images.py).
+        "source_image": urllib.parse.urljoin(BASE, image),
     }
 
 
@@ -264,12 +266,11 @@ def scan(workers: int = 4) -> tuple[dict, int]:
     if len(entries) < MIN_ENTRIES:
         raise SystemExit(f"only {len(entries)} capsules parsed from {len(urls)} URLs — refusing to write")
 
-    # A generated banner (images.py) wins over the store photo; keep the store photo as
-    # source_image so colour/provenance is not lost.
+    # Only a generated banner (images.py) becomes `image`; capsules without one keep no
+    # `image` at all, so a client never falls back to a Nespresso store photo.
     generated = {p.stem for p in IMAGES.glob("*.png")}
     for entry, _ in entries.values():
         if entry["sku"] in generated:
-            entry["source_image"] = entry["image"]
             entry["image"] = f"{RAW_BASE}/images/{entry['sku']}.png"
 
     capsules = sorted((e for e, _ in entries.values()), key=lambda c: (c["line"], c["family"], c["name"]))
@@ -333,7 +334,7 @@ def selftest() -> None:
         "available": True,
         "price": 0.52,
         "url": f"{BASE}/de/de/order/capsules/vertuo/altissio",
-        "image": f"{BASE}/ecom/x.png",
+        "source_image": f"{BASE}/ecom/x.png",
     }, entry_from_product(product)
     # a `}` inside a string must not cut the object short
     assert _balanced('{"text":"a } b","n":1}', 0) == '{"text":"a } b","n":1}'
