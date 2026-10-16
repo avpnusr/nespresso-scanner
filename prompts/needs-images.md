@@ -1,56 +1,11 @@
 # Image generation prompts
 
-26 capsule(s) with no banner yet — generated 2026-10-16 by `images.py prompts`.
+16 capsule(s) with no banner yet — generated 2026-10-16 by `images.py prompts`.
 
 Mode: ChatGPT built-in image generation, highest quality. Final size 1819 × 865 px (wide 2.103:1).
 For each capsule, attach two reference images: the line's style anchor (under `attach`) and
 the capsule's own store photo (under `photo`). Paste the paragraph, download, and save it
 as the path under `save as` — then run `images.py ingest`.
-
-## Cosi · original · Espresso
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/cosi-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/15769787269150/Desktop-Standard-2000x2000.png
-     attach: prompts/style-original.png
-     save as: images/7969.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "COSI", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Eine Zitrusnote mit starken Anteilen von Limette. Dieser seltene und erfrischende Charakter wird durch einen leichten Körper unterstrichen..
-
-## India · original · Espresso
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/master-origin-india-kaffee-kapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/10840367792158/C-0359-India-2000x2000.png
-     attach: prompts/style-original.png
-     save as: images/7977.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "INDIA", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Kakao- und Gewürznoten mit einem Bouquet, das an Nelken, Pfeffer und Muskatnuss erinnert..
-
-## Indonesia · original · Espresso
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/master-origin-indonesia-kaffee-kapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/12038876725278/C-0360-Indonesia-2000x2000.png
-     attach: prompts/style-original.png
-     save as: images/7975.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "INDONESIA", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Kakao- und Gewürznoten mit einem Bouquet, das an Nelken, Pfeffer und Muskatnuss erinnert..
-
-## Ispirazione Napoli · original · Ristretto
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/ispirazione-napoli-kaffee-kapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/15819004575774/C-0471-ResponsiveStandard.png
-     attach: prompts/style-original.png
-     save as: images/7984.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "ISPIRAZIONE NAPOLI", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Die in den Straßen der Stadt tief verwurzelte Kaffeetradition Neapels hat unsere dunkle Röstung inspiriert, die die intensive Stärke des Kaffees auf meisterhafte Weise hervorbringt. Durch das besondere Extra der Robusta-Bohnen entsteht ein samtiger, cremiger Kaffee mit extrem vollem Körper und einer angenehmen Bitterkeit im Nachgang. Dieser Kaffee zollt den Röstmeistern der italienischen Kaffeehauptstadt Tribut..
-
-## Ispirazione Roma · original · Ristretto
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/ispirazione-roma-kaffee-kapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/12839352893470/Desktop-Standard-2000x2000.png
-     attach: prompts/style-original.png
-     save as: images/7985.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "ISPIRAZIONE ROMA", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Seit den Tagen des alten Roms hinterließen viele Kulturen ihre Spuren in dieser Metropole. Unterschiedliche Schichten der Zivilisation haben diese große Stadt bis heute geformt und im modernen Rom lebt diese vielschichtige Geschichte mit einzigartiger Eleganz weiter. Auch der Ispirazione Roma ist wunderbar komplex. Er überzeugt mit seiner feinen Ausgewogenheit aus starken Röstaromen, vollmundigen Holz- und Getreidenoten und der Finesse von zarter Säure und aromatischer Eleganz..
 
 ## Ispirazione Venezia · original · Ristretto
 
@@ -168,51 +123,6 @@ Use case: ads-marketing. Generate ONE standalone high-quality premium photoreali
      save as: images/7932.20.png -->
 
 Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "VOLLUTO DECAFFEINATO", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Dieser koffeinfreie Espresso ist süß und weich, reich und rund, genau wie Volluto – aber ohne Koffein. Der ausgewogene Geschmack von Volluto Decaffeinato sorgt für pure Lebensfreude..
-
-## Double Espresso Chiaro Decaffeinato · vertuo · Double Espresso
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/vertuo/double-espresso-chiaro-decaffeinato-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/34710531670046/C-1305-VL-ResponsiveStandard.png
-     attach: prompts/style-vertuo.png
-     save as: images/7279.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso Vertuo DOUBLE ESPRESSO CHIARO DECAFFEINATO banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE AND COMPOSITION ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule large in the hero foreground center-right, and a clear glass mug of hot black coffee with thick golden crema behind it on the right. Subject: one metallic Vertuo dome capsule with subtle radial ribs, embossed Nespresso N and a silver barcode flange — match its exact colour, finish and decorative pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "DOUBLE ESPRESSO CHIARO DECAFFEINATO", split naturally into two or three lines with generous margins, then small spaced "VERTUO" between delicate rules below. All text legible with no overlap; capsule and glass fully within frame. No other text, no ACTIVE or COFFEE+ labels, no slogans, no health claims, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Ein intensiver und doch ausgewogener Double Espresso mit holzigen, erdigen und gerösteten Getreidenoten..
-
-## Ginseng Delight · vertuo · Double Espresso
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/vertuo/ginseng-delight-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/26542526136350/C-1073-ResponsiveStandard.png
-     attach: prompts/style-vertuo.png
-     save as: images/7066.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso Vertuo GINSENG DELIGHT banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE AND COMPOSITION ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule large in the hero foreground center-right, and a clear glass mug of hot black coffee with thick golden crema behind it on the right. Subject: one metallic Vertuo dome capsule with subtle radial ribs, embossed Nespresso N and a silver barcode flange — match its exact colour, finish and decorative pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "GINSENG DELIGHT", split naturally into two or three lines with generous margins, then small spaced "VERTUO" between delicate rules below. All text legible with no overlap; capsule and glass fully within frame. No other text, no ACTIVE or COFFEE+ labels, no slogans, no health claims, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Noten von Karamell und Gebäck, kombiniert mit dem markanten Geschmack von Ginseng und seinen subtilen erdigen Noten. (ingredients: gemahlener Röstkaffee, entkoffeinierter, gemahlener Röstkaffee, natürliches Aroma, Panax-Ginseng-Extrakt (0,05%).).
-
-## Hazelnut Brownie Flavoured Coffee · vertuo · Mug
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/vertuo/limited-edition-hazelnut-brownie-vertuo-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/51208005386270/C-1406-VL-ResponsiveStandard.png
-     attach: prompts/style-vertuo.png
-     save as: images/7200.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso Vertuo HAZELNUT BROWNIE FLAVOURED COFFEE banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE AND COMPOSITION ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule large in the hero foreground center-right, and a clear glass mug of hot black coffee with thick golden crema behind it on the right. Subject: one metallic Vertuo dome capsule with subtle radial ribs, embossed Nespresso N and a silver barcode flange — match its exact colour, finish and decorative pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "HAZELNUT BROWNIE FLAVOURED COFFEE", split naturally into two or three lines with generous margins, then small spaced "VERTUO" between delicate rules below. All text legible with no overlap; capsule and glass fully within frame. No other text, no ACTIVE or COFFEE+ labels, no slogans, no health claims, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Ein genussvoller Kaffee mit reichhaltigen Brownie-Fudge-Noten, warmem nussigem Aroma und Noten gerösteter Haselnüsse. (ingredients: Gemahlener Röstkaffee, natürliches Kakaoaroma mit anderen natürlichen Aromen.).
-
-## Il Caffè · vertuo · Espresso
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/vertuo/il-caffe-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/14192466624542/Desktop-Standard-2000x2000.png
-     attach: prompts/style-vertuo.png
-     save as: images/7060.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso Vertuo IL CAFFÈ banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE AND COMPOSITION ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule large in the hero foreground center-right, and a clear glass mug of hot black coffee with thick golden crema behind it on the right. Subject: one metallic Vertuo dome capsule with subtle radial ribs, embossed Nespresso N and a silver barcode flange — match its exact colour, finish and decorative pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "IL CAFFÈ", split naturally into two or three lines with generous margins, then small spaced "VERTUO" between delicate rules below. All text legible with no overlap; capsule and glass fully within frame. No other text, no ACTIVE or COFFEE+ labels, no slogans, no health claims, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Ein Schluck Il Caffè bietet dem Gaumen das komplette italienische Kaffeeerlebnis. Es ist ein intensiver Kaffee, schön komplex in seinen Röst- und Getreidenoten und mit einer weichen und samtigen Textur. Ein Hauch von Holz- und Kakaoaromen unterstreicht den reichen Charakter dieses klassischen Kaffees. Sein lang anhaltender Nachgeschmack macht ihn zu einem Kaffee, den man nicht vergisst..
-
-## Intenso · vertuo · Mug
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/vertuo/nespresso-kaffee-kapsel-vertuo-intenso
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/10386862899230/C-0171-2000x2000.png
-     attach: prompts/style-vertuo.png
-     save as: images/7042.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso Vertuo INTENSO banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE AND COMPOSITION ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule large in the hero foreground center-right, and a clear glass mug of hot black coffee with thick golden crema behind it on the right. Subject: one metallic Vertuo dome capsule with subtle radial ribs, embossed Nespresso N and a silver barcode flange — match its exact colour, finish and decorative pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "INTENSO", split naturally into two or three lines with generous margins, then small spaced "VERTUO" between delicate rules below. All text legible with no overlap; capsule and glass fully within frame. No other text, no ACTIVE or COFFEE+ labels, no slogans, no health claims, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Noten von braunem Zucker und Röstaromen sind die charakteristischen Aromanoten dieser Vertuo Kaffeekapsel. Dadurch entsteht ein großer schwarzer Kaffee mit unverwechselbar anhaltendem Nachklang und einer dichten Kaffeecrema..
 
 ## Melozio · vertuo · Mug
 
