@@ -1,29 +1,11 @@
 # Image generation prompts
 
-3 capsule(s) with no banner yet — generated 2026-10-16 by `images.py prompts`.
+1 capsule(s) with no banner yet — generated 2026-10-16 by `images.py prompts`.
 
 Mode: ChatGPT built-in image generation, highest quality. Final size 1819 × 865 px (wide 2.103:1).
 For each capsule, attach two reference images: the line's style anchor (under `attach`) and
 the capsule's own store photo (under `photo`). Paste the paragraph, download, and save it
 as the path under `save as` — then run `images.py ingest`.
-
-## Vaniglia · original · Lungo
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/vaniglia-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/17432220205086/C-1062-ResponsiveStandard.png
-     attach: prompts/style-original.png
-     save as: images/7933.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "VANIGLIA", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: Der klassische Geschmack von Vanille trifft auf süße Keks- und Getreidenoten, die dem feinen Arabica-Blend entspringen. (ingredients: Gemahlener Röstkaffee, natürliches Vanillearoma mit anderen natürlichen Aromen.).
-
-## Vaniglia Decaffeinato · original · Lungo
-
-<!-- store: https://www.nespresso.com/de/de/order/capsules/original/vaniglia-decaffeinato-kaffeekapseln
-     photo: https://www.nespresso.com/ecom/medias/sys_master/public/44523093557278/C-1324-OL-ResponsiveStandard.png
-     attach: prompts/style-original.png
-     save as: images/7988.20.png -->
-
-Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic Nespresso ORIGINAL coffee banner, 1819x865 pixels, wide 2.103:1. The attached style reference is for STYLE ONLY: match its cinematic warm sunlight, exquisite realistic materials, elegant readable cream serif heading at the left, the capsule in the hero foreground center-right, and a clear glass of hot black coffee with rich golden crema behind it on the right. Crucial capsule anatomy: ORIGINAL small tapered truncated-cone aluminum capsule, narrow flat closed end on top, broad silver circular foil flange at the base, subtly fluted sloping walls, embossed N logo — no Vertuo dome, no barcode rim; match its exact colour and pattern to the attached store photo. Scene: a distinct, elegant scene that fits this capsule's origin or flavour, consistent with the reference series. Exact heading at the left: "VANIGLIA DECAFFEINATO", split naturally into balanced lines with generous margins, then small spaced "ORIGINAL" between delicate rules below. Roasted coffee beans on warm stone, shallow depth of field. All text legible with no overlap; capsule and glass fully within frame. No other text, no ice, no watermark; single image, no collage. Flavour and origin from the Nespresso product page: The classic vanilla flavour harmoniously blends with the coffee base to bring out indulgent pastry notes such as cake, biscuits, custard, nuts, and almonds. (ingredients: Entkoffeinierter, gemahlener Röstkaffee, natürliches Vanillearoma mit anderen natürlichen Aromen).
 
 ## Vienna Lungo Decaffeinato · original · Lungo
 
