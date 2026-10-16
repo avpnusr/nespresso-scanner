@@ -162,7 +162,9 @@ def dominant_colour(png: bytes) -> tuple[int, int, int] | None:
         img = img.convert("RGB")
         img.thumbnail((64, 64))
         r = g = b = n = 0
-        for px in img.getdata():
+        # getdata() is deprecated in Pillow 12.1, which is also where its replacement arrived
+        pixels = getattr(img, "get_flattened_data", img.getdata)()
+        for px in pixels:
             if min(px) > 210 or max(px) < 35:
                 continue
             r += px[0]
