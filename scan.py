@@ -40,6 +40,19 @@ RAW_BASE = "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main"
 MIN_ENTRIES = 20
 MAX_ERROR_SHARE = 0.1
 
+# The de sitemap omits capsules that are still sold (verified live, missing from
+# /de/de/sitemap since 2026-10): fetch their product pages directly. Best-effort —
+# if one is delisted it only adds to the error count, which stays within
+# MAX_ERROR_SHARE. "Yuzu Vanilla Over Ice" sold in other markets but not in de.
+EXTRA_PAGE_SLUGS = (
+    "vertuo/nespresso-kaffee-kapsel-vertuo-melozio",
+    "vertuo/nespresso-kaffee-kapsel-vertuo-intenso",
+    "vertuo/nespresso-kaffee-kapsel-vertuo-stormio",
+    "vertuo/odacio-vertuo-coffee-pods",
+    "vertuo/nespresso-kaffee-kapsel-vertuo-arondio",
+    "vertuo/master-origin-peru-organic-vertuo-coffee-pods",
+)
+
 FAMILIES = {
     "vertuo": ["Espresso", "Double Espresso", "Gran Lungo", "Mug", "Alto", "Carafe", "Alto XL"],
     "original": ["Ristretto", "Espresso", "Lungo"],
@@ -183,12 +196,19 @@ def fetch(url: str, timeout: int = 30, retries: int = 2) -> str:
 
 def scan(workers: int = 4) -> tuple[dict, int]:
     urls = capsule_urls(fetch(f"{BASE}{PREFIX}/sitemap"))
+    urls += [f"{BASE}{PREFIX}/order/capsules/{slug}" for slug in EXTRA_PAGE_SLUGS
+             if f"{BASE}{PREFIX}/order/capsules/{slug}" not in set(urls)]
     if not urls:
         raise SystemExit("no capsule URLs found in the sitemap — refusing to write")
 
     def one(url: str) -> tuple[str, dict | None | Exception]:
         try:
-            return url, product_from_page(fetch(url))
+            product = product_from_page(fetch(url))
+            if product is None:
+                # A soft 404 (200 + not-found HTML) or a render hiccup never raises, so
+                # fetch() retries don't see it; refetch once.
+                product = product_from_page(fetch(url))
+            return url, product
         except Exception as exc:  # one bad page must not sink the scan
             return url, exc
 
