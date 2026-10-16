@@ -63,7 +63,7 @@ jobs:
               || echo "redraw failed; the catalogue scan is unaffected"
             exit 0
           fi
-          # --limit is per line: at most two Original and two Vertuo banners a run.
+          # --limit is per line: at most five Original and five Vertuo banners a run.
           # A failed drawing must not stop the catalogue scan, so it only warns.
           python3 images.py generate --known /tmp/known.json --limit 5 \
             || echo "banner generation failed; the catalogue scan is unaffected"

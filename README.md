@@ -71,8 +71,8 @@ python3 images.py generate --dry-run --all                   # show what it woul
 ```
 
 `--limit` counts per line, so a long Original backlog cannot keep Vertuo capsules
-without a banner for weeks: the queue is sorted by line, and two Originals a run
-would be two weeks of nothing else.
+without a banner for weeks: the queue is sorted by line, and a few Originals a run
+would be weeks of nothing else.
 
 Each drawing passes two reference images to the API: the line's style anchor
 (`prompts/style-vertuo.png` / `prompts/style-original.png`, carrying the series'
@@ -86,7 +86,7 @@ library.
 ## Refreshing
 
 `.gitea/workflows/catalogue.yml` runs `scan.py` twice a day (05:00 and 17:00 UTC),
-draws a banner for up to two capsules that have none, and commits `catalogue.json`,
+draws a banner for up to five capsules per line that have none, and commits `catalogue.json`,
 `images/` and `prompts/needs-images.md` when they changed. It can also be started
 by hand from the Actions tab. The commit step pushes with the built-in
 `${{ secrets.GITEA_TOKEN }}`; the repository needs `contents: write` (set in the
@@ -94,6 +94,6 @@ workflow) and Actions enabled.
 
 Banner drawing needs an `OPENAI_API_KEY` repository secret; without it the
 workflow skips that step. It costs real money per image, so the workflow caps the
-run at two banners per line — raise `--limit` there to work through the 41-capsule
-backlog faster. Capsules the dashboard already has its own picture for are skipped,
+run at five banners per line — raise `--limit` there to work through the backlog
+faster. Capsules the dashboard already has its own picture for are skipped,
 like the prompt list does.
