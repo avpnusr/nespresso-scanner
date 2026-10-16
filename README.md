@@ -67,9 +67,12 @@ ChatGPT prompts for capsules that still need one, and installs the results — s
 [prompts/README.md](prompts/README.md).
 
 ```bash
-OPENAI_API_KEY=sk-... python3 images.py generate --limit 2   # draw banners for new capsules
+OPENAI_API_KEY=sk-... python3 images.py generate --limit 2   # draw banners for capsules without one
 python3 images.py generate --line original --limit 5          # catch up one line only
-python3 images.py generate --dry-run --all                   # show what it would draw
+python3 images.py generate --dry-run                          # show what it would draw
+
+Every capsule in `catalogue.json` that has no `images/<sku>.png` yet is a
+candidate, regardless of what the dashboard knows.
 ```
 
 `--limit` counts per line, so a long Original backlog cannot keep Vertuo capsules
@@ -97,5 +100,4 @@ workflow) and Actions enabled.
 Banner drawing needs an `OPENAI_API_KEY` repository secret; without it the
 workflow skips that step. It costs real money per image, so the workflow caps the
 run at five banners per line — raise `--limit` there to work through the backlog
-faster. Capsules the dashboard already has its own picture for are skipped,
-like the prompt list does.
+faster.

@@ -11,7 +11,6 @@ Pillow to scale the API's output to the banner size.
     python3 images.py generate --limit 2      # draw banners for new capsules, needs OPENAI_API_KEY
     python3 images.py generate --dry-run      # show what would be drawn, no API call
     python3 images.py prompts                 # prompts/needs-images.md for capsules with no image
-    python3 images.py prompts --all           # ignore the dashboard catalogue, list every capsule
     python3 images.py ingest --from ~/Downloads/nes-pics
     python3 images.py --selftest
 
@@ -47,7 +46,6 @@ ROOT = Path(__file__).resolve().parent
 CATALOGUE = ROOT / "catalogue.json"
 IMAGES = ROOT / "images"
 PROMPTS = ROOT / "prompts"
-STATS_CATALOGUE = ROOT.parent / "nespresso-stats" / "capsules.json"
 RAW_BASE = "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main"
 
 # One style anchor per line; attach it as a reference (composition/lighting only).
@@ -320,21 +318,12 @@ def generate(entries: list[dict], limit: int, key: str, *, dry_run: bool = False
     return installed
 
 
-def load_known(path: Path) -> set[str]:
-    data = json.loads(path.read_text())
-    return {(c.get("sku") or "").strip() for c in data if c.get("sku")}
-
-
-def needs_image(known: set[str], every: bool) -> list[dict]:
+def needs_image() -> list[dict]:
     doc = json.loads(CATALOGUE.read_text())
-    out = []
-    for entry in doc["capsules"]:
-        if not entry.get("available", True) or has_image(entry):
-            continue
-        if not every and (entry.get("sku") or "") in known:
-            continue  # the dashboard already has its own picture for this capsule
-        out.append(entry)
-    return sorted(out, key=lambda e: (e.get("line", ""), e.get("name", "")))
+    return sorted(
+        (e for e in doc["capsules"] if e.get("available", True) and not has_image(e)),
+        key=lambda e: (e.get("line", ""), e.get("name", "")),
+    )
 
 
 def write_prompts(entries: list[dict], out: Path) -> None:
@@ -506,10 +495,6 @@ def main() -> None:
     parser.add_argument("--selftest", action="store_true", help="check prompt/ingest logic, no files touched")
     sub = parser.add_subparsers(dest="command")
     p_prompts = sub.add_parser("prompts", help="write the ChatGPT prompt batch")
-    p_prompts.add_argument("--all", action="store_true",
-                           help="list every capsule without an image, not just ones the dashboard lacks")
-    p_prompts.add_argument("--known", type=Path, default=STATS_CATALOGUE,
-                           help="dashboard catalogue to skip (default: ../nespresso-stats/capsules.json)")
     p_prompts.add_argument("--out", type=Path, default=PROMPTS / "needs-images.md")
     p_generate = sub.add_parser("generate", help="draw banners with the OpenAI image API")
     p_generate.add_argument("--limit", type=int, default=2, help="how many banners to draw per line (default 2)")
@@ -517,11 +502,7 @@ def main() -> None:
                             help="only this line (default: both)")
     p_generate.add_argument("--sku", action="append", default=[], metavar="SKU",
                             help="draw only these sku(s), overwriting their banners"
-                                 " (ignores the cost filter and the per-line cap)")
-    p_generate.add_argument("--all", action="store_true",
-                            help="draw for every capsule without a banner, not just ones the dashboard lacks")
-    p_generate.add_argument("--known", type=Path, default=STATS_CATALOGUE,
-                            help="dashboard catalogue to skip (default: ../nespresso-stats/capsules.json)")
+                                 " (ignores the per-line cap)")
     p_generate.add_argument("--quality", default=QUALITY)
     p_generate.add_argument("--model", default=MODEL)
     p_generate.add_argument("--size", default=API_SIZE,
@@ -536,12 +517,7 @@ def main() -> None:
     if args.selftest:
         selftest()
     elif args.command == "prompts":
-        known = set()
-        if not args.all:
-            if not args.known.exists():
-                raise SystemExit(f"no dashboard catalogue at {args.known} (use --all to ignore it)")
-            known = load_known(args.known)
-        entries = needs_image(known, args.all)
+        entries = needs_image()
         write_prompts(entries, args.out)
         print(f"wrote {len(entries)} prompt(s) to {args.out}")
     elif args.command == "generate":
@@ -554,9 +530,7 @@ def main() -> None:
                        if e.get("sku") in wanted]
             limit = len(entries)  # --sku names exactly what to (re)draw, no per-line cap
         else:
-            # the dashboard catalogue is only a cost filter, so a missing one means more work, not an error
-            known, every = (load_known(args.known), False) if args.known.exists() and not args.all else (set(), True)
-            entries = [e for e in needs_image(known, every)
+            entries = [e for e in needs_image()
                        if not args.line or (e.get("line") or "vertuo") == args.line]
             limit = args.limit
         count = generate(entries, limit, key, dry_run=args.dry_run, size=args.size,
