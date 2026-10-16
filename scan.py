@@ -196,8 +196,12 @@ def fetch(url: str, timeout: int = 30, retries: int = 2) -> str:
 
 def scan(workers: int = 4) -> tuple[dict, int]:
     urls = capsule_urls(fetch(f"{BASE}{PREFIX}/sitemap"))
-    urls += [f"{BASE}{PREFIX}/order/capsules/{slug}" for slug in EXTRA_PAGE_SLUGS
-             if f"{BASE}{PREFIX}/order/capsules/{slug}" not in set(urls)]
+    seen = set(urls)
+    for slug in EXTRA_PAGE_SLUGS:  # sitemap-omitted pages, best effort
+        url = f"{BASE}{PREFIX}/order/capsules/{slug}"
+        if url not in seen:
+            seen.add(url)
+            urls.append(url)
     if not urls:
         raise SystemExit("no capsule URLs found in the sitemap — refusing to write")
 
