@@ -34,20 +34,40 @@ jobs:
           python3 scan.py --selftest
           python3 scan.py
           python3 images.py --selftest
-          # Refresh the list of capsules still needing a banner, skipping the ones the
-          # dashboard already has its own picture for.
-          if curl -fsS "$STATS_CATALOGUE_URL" -o /tmp/known.json \
-             && python3 -c "import json; json.load(open('/tmp/known.json'))"; then
+          # The dashboard catalogue is a cost filter: don't draw a banner for a capsule it
+          # already has a picture for. If it is unreachable, generate for everything.
+          curl -fsS "$STATS_CATALOGUE_URL" -o /tmp/known.json \
+            || echo "dashboard catalogue unavailable; nothing to skip against"
+
+      - name: Draw a banner for capsules without one
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "no OPENAI_API_KEY secret; skipping banner generation"
+            exit 0
+          fi
+          # the generator scales the API's output to the banner size, the repo itself stays stdlib-only
+          python3 -m pip install --quiet --break-system-packages pillow \
+            || python3 -m pip install --quiet pillow
+          # --limit is per line: at most two Original and two Vertuo banners a run.
+          # A failed drawing must not stop the catalogue scan, so it only warns.
+          python3 images.py generate --known /tmp/known.json --limit 2 \
+            || echo "banner generation failed; the catalogue scan is unaffected"
+
+      - name: Refresh the list of capsules still needing a banner
+        run: |
+          if python3 -c "import json; json.load(open('/tmp/known.json'))"; then
             python3 images.py prompts --known /tmp/known.json
           else
             echo "dashboard catalogue unavailable; keeping the existing prompt list"
           fi
 
-      - name: Commit the catalogue if it changed
+      - name: Commit the catalogue, banners and prompt list if they changed
         run: |
           git config user.name "nespresso-scanner"
           git config user.email "nespresso-scanner@users.noreply.git.khmls.net"
-          git add catalogue.json prompts/needs-images.md
+          git add catalogue.json prompts/needs-images.md images
           if git diff --cached --quiet; then
             echo "nothing changed"
             exit 0

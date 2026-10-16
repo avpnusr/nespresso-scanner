@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
-"""Capsule banner images, made by hand in ChatGPT and installed here.
+"""Capsule banner images, in a fixed banner style, one 1819x865 image per
+capsule, living in `images/<sku>.png`.
 
 `catalogue.json` is machine-readable, but the dashboards want a picture per
-capsule. Those are generated with ChatGPT's built-in image tool in a fixed
-banner style, one 1819x865 image per capsule, and live in `images/<sku>.png`.
-This script writes the prompts and installs the results. Python 3 standard
-library only, like the rest.
+capsule. This script draws those banners with the OpenAI image API, writes the
+prompt batches for making them by hand in ChatGPT, and installs the results.
+Python 3 standard library only, except the `generate` command which needs
+Pillow to scale the API's output to the banner size.
 
-    python3 images.py prompts                  # prompts/needs-images.md for capsules with no image
-    python3 images.py prompts --all            # ignore the dashboard catalogue, list every capsule
+    python3 images.py generate --limit 2      # draw banners for new capsules, needs OPENAI_API_KEY
+    python3 images.py generate --dry-run      # show what would be drawn, no API call
+    python3 images.py prompts                 # prompts/needs-images.md for capsules with no image
+    python3 images.py prompts --all           # ignore the dashboard catalogue, list every capsule
     python3 images.py ingest --from ~/Downloads/nes-pics
     python3 images.py --selftest
+
+Drawing a banner attaches two reference images: the line's style anchor
+(`prompts/style-vertuo.png` / `prompts/style-original.png`) and the capsule's own
+store photo. The store photo is what keeps the capsule's shape, colour and
+pattern right; the anchor keeps the scene, lighting and typography of the series.
 
 Images are keyed by the store **sku**, so a capsule keeps its picture when the
 store renames it. `scan.py` then points the catalogue's `image` at the generated
@@ -19,10 +27,17 @@ banner and keeps the store photo as `source_image`.
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import json
+import os
 import re
 import shutil
+import tempfile
 import unicodedata
+import urllib.error
+import urllib.request
+import uuid
 from datetime import date
 from pathlib import Path
 
@@ -37,9 +52,19 @@ RAW_BASE = "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main"
 
 # One style anchor per line; attach it as a reference (composition/lighting only).
 REFERENCES = {
-    "vertuo": "active-coffee-plus.png",
-    "original": "ispirazione-ristretto-italiano.png",
+    "vertuo": "style-vertuo.png",
+    "original": "style-original.png",
 }
+
+# The image API rejects the banner's own 1819x865 (width and height must both be
+# divisible by 16 and no divisible size has that exact ratio), so it draws the
+# nearest landscape size and `banner()` scales it down: 0.3%, invisible.
+API_SIZE = "1824x864"
+BANNER_SIZE = (1819, 865)
+QUALITY = "high"
+MODEL = "gpt-image-2.5-sunburst"
+EDITS_URL = "https://api.openai.com/v1/images/edits"
+USER_AGENT = "nespresso-scanner/1.0 (+https://git.khmls.net/klein/nespresso-scanner)"
 
 VERTUO = (
     "Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic "
@@ -95,6 +120,123 @@ def prompt_for(entry: dict) -> str:
     return template.format(name=(entry.get("name") or "").upper())
 
 
+def fetch(url: str) -> bytes:
+    """Download a store photo (the CDN wants a user agent)."""
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=180) as response:
+        return response.read()
+
+
+def multipart(prompt: str, files: list[tuple[str, bytes]], size: str, quality: str,
+              model: str) -> tuple[bytes, str]:
+    """Build the `POST /v1/images/edits` body: one prompt, N reference images."""
+    boundary = uuid.uuid4().hex
+    chunks: list[bytes] = []
+
+    def field(name: str, value: str) -> None:
+        chunks.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"'
+                      f'\r\n\r\n{value}\r\n'.encode())
+
+    def image(name: str, filename: str, data: bytes) -> None:
+        chunks.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; '
+                      f'filename="{filename}"\r\nContent-Type: image/png\r\n\r\n'.encode())
+        chunks.append(data + b"\r\n")
+
+    field("model", model)
+    field("prompt", prompt)
+    field("size", size)
+    field("quality", quality)
+    field("n", "1")
+    for filename, data in files:
+        image("image[]", filename, data)
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def edit(prompt: str, files: list[tuple[str, bytes]], key: str, size: str = API_SIZE,
+         quality: str = QUALITY, model: str = MODEL) -> bytes:
+    """Draw one banner and return the PNG bytes the API hands back."""
+    body, content_type = multipart(prompt, files, size, quality, model)
+    request = urllib.request.Request(EDITS_URL, data=body, headers={
+        "Authorization": f"Bearer {key}", "Content-Type": content_type})
+    try:
+        with urllib.request.urlopen(request, timeout=900) as response:
+            doc = json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise SystemExit(f"image API refused the request ({exc.code}): {exc.read().decode()[:400]}")
+    print(f"  {doc.get('usage', {}).get('total_tokens', '?')} tokens")
+    return base64.b64decode(doc["data"][0]["b64_json"])
+
+
+def banner(png: bytes) -> bytes:
+    """Scale the API's 1824x864 output to the 1819x865 the rest of the series uses."""
+    from PIL import Image  # only the generator needs it; the rest of the repo stays stdlib
+    with Image.open(io.BytesIO(png)) as image:
+        out = io.BytesIO()
+        image.convert("RGB").resize(BANNER_SIZE, Image.LANCZOS).save(out, "PNG", optimize=True)
+        return out.getvalue()
+
+
+def references(entry: dict) -> list[tuple[str, bytes]]:
+    """The line's style anchor (when installed) plus the capsule's own store photo.
+
+    The store photo comes last and carries the capsule's anatomy, colour and
+    pattern; the anchor only carries the series' scene, light and typography.
+    """
+    out: list[tuple[str, bytes]] = []
+    anchor = PROMPTS / REFERENCES.get(entry.get("line") or "vertuo", "")
+    if anchor.is_file():
+        out.append((anchor.name, anchor.read_bytes()))
+    photo = store_photo(entry)
+    if photo:
+        out.append(("store.png", fetch(photo)))
+    return out
+
+
+def per_line(entries: list[dict], limit: int) -> list[dict]:
+    """Cap how many banners a run draws per line.
+
+    The queue is sorted by line, so a long Original backlog would otherwise be
+    drawn to the end before a single Vertuo capsule is reached.
+    """
+    picked: list[dict] = []
+    counts: dict[str, int] = {}
+    for entry in entries:
+        line = entry.get("line") or "vertuo"
+        if counts.get(line, 0) < limit:
+            counts[line] = counts.get(line, 0) + 1
+            picked.append(entry)
+    return picked
+
+
+def generate(entries: list[dict], limit: int, key: str, *, dry_run: bool = False,
+             size: str = API_SIZE, quality: str = QUALITY, model: str = MODEL) -> int:
+    """Draw a banner for each entry (up to `limit` per line) and install it."""
+    if not dry_run:
+        try:
+            import PIL  # noqa: F401  only the generator needs it
+        except ImportError:
+            raise SystemExit("drawing banners needs Pillow: python3 -m pip install pillow")
+    installed = 0
+    for entry in per_line(entries, limit):
+        try:
+            files = references(entry)
+        except (urllib.error.URLError, OSError) as exc:  # dead store photo: skip this capsule, keep going
+            print(f"{entry.get('sku')}  {entry.get('name')}: store photo unavailable ({exc}); skipped")
+            continue
+        print(f"{entry.get('sku')}  {entry.get('name')}  ({len(files)} reference(s))")
+        if dry_run:
+            continue
+        if not files:
+            print("  no reference images; skipped")
+            continue
+        # ingest() keys a banner by its file name, so stage it as <sku>.png
+        staged = Path(tempfile.mkdtemp()) / f"{entry['sku']}.png"
+        staged.write_bytes(banner(edit(prompt_for(entry), files, key, size, quality, model)))
+        installed += ingest([staged])
+    return installed
+
+
 def load_known(path: Path) -> set[str]:
     data = json.loads(path.read_text())
     return {(c.get("sku") or "").strip() for c in data if c.get("sku")}
@@ -132,7 +274,7 @@ def write_prompts(entries: list[dict], out: Path) -> None:
             "",
             f"<!-- store: {entry.get('url', '')}",
             f"     photo: {store_photo(entry)}",
-            f"     attach: {REFERENCES.get(entry.get('line', 'vertuo'), REFERENCES['vertuo'])}",
+            f"     attach: prompts/{REFERENCES.get(entry.get('line', 'vertuo'), REFERENCES['vertuo'])}",
             f"     save as: images/{sku}.png -->",
             "",
             prompt_for(entry),
@@ -151,16 +293,23 @@ def source_files(from_dir: Path | None, files: list[Path]) -> list[Path]:
 
 def ingest(paths: list[Path]) -> int:
     doc = json.loads(CATALOGUE.read_text())
-    by_key: dict[str, dict] = {}
+    by_key: dict[str, dict | None] = {}
     for entry in doc["capsules"]:
         if entry.get("sku"):
             by_key[entry["sku"]] = entry
-        by_key.setdefault(slug(entry.get("name", "")), entry)
+        # A name is only a usable key while it is unique: Colombia, Kahawa Ya Congo and
+        # Hazelnut Brownie are each sold as an Original *and* a Vertuo capsule. Matching
+        # one of those by name put the Vertuo banner on the Original sku, so a shared
+        # name is marked as ambiguous instead of resolved to whichever came first.
+        name = slug(entry.get("name", ""))
+        by_key[name] = entry if name not in by_key else None
     installed = 0
     for src in paths:
-        entry = by_key.get(src.stem) or by_key.get(slug(src.stem))
+        key = src.stem if src.stem in by_key else slug(src.stem)
+        entry = by_key.get(key)
         if entry is None:
-            print(f"skip {src.name}: no capsule matches \u201c{src.stem}\u201d")
+            print(f"skip {src.name}: no single capsule matches \u201c{src.stem}\u201d "
+                  f"(a name both lines share matches none) \u2014 name the file after the sku")
             continue
         sku = entry.get("sku") or slug(entry.get("name", ""))
         IMAGES.mkdir(exist_ok=True)
@@ -180,6 +329,28 @@ def selftest() -> None:
     original = {"sku": "7928.20", "name": "Arpeggio", "line": "original", "family": "Espresso"}
     assert "MELOZIO" in prompt_for(vertuo) and "VERTUO" in prompt_for(vertuo)
     assert "ORIGINAL" in prompt_for(original) and "truncated-cone" in prompt_for(original)
+    # the per-run cap is per line, so a long Original backlog cannot starve Vertuo
+    backlog = ([{"sku": f"o{i}", "line": "original", "name": f"o{i}"} for i in range(5)]
+               + [{"sku": f"v{i}", "line": "vertuo", "name": f"v{i}"} for i in range(3)])
+    assert [e["sku"] for e in per_line(backlog, 2)] == ["o0", "o1", "v0", "v1"]
+    # the image API body carries one prompt and every reference image
+    body, content_type = multipart("hello", [("style-vertuo.png", b"a"), ("store.png", b"b")],
+                                   API_SIZE, QUALITY, MODEL)
+    assert content_type.startswith("multipart/form-data; boundary=")
+    assert b'name="prompt"\r\n\r\nhello' in body, body[:200]
+    assert body.count(b'name="image[]"') == 2 and API_SIZE.encode() in body
+    assert body.endswith(b"--\r\n")
+    # the API size is not the banner size, so its output has to be scaled to it
+    assert BANNER_SIZE == (1819, 865) and API_SIZE != "1819x865"
+    try:
+        from PIL import Image
+    except ImportError:
+        pass  # only the generator needs it
+    else:
+        drawn = io.BytesIO()
+        Image.new("RGB", (1824, 864)).save(drawn, "PNG")
+        with Image.open(io.BytesIO(banner(drawn.getvalue()))) as scaled:
+            assert scaled.size == BANNER_SIZE, scaled.size
     # ingest keys a downloaded banner by sku and rewrites the catalogue fields
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
@@ -192,13 +363,31 @@ def selftest() -> None:
                 "generated": "x", "source": "s", "market": "de", "language": "de", "count": 1,
                 "capsules": [dict(vertuo)],
             }))
-            banner = tmp / "7005.20.png"
-            banner.write_bytes(b"\x89PNG\r\n\x1a\n")
-            assert ingest([banner]) == 1
+            png = tmp / "7005.20.png"
+            png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            assert ingest([png]) == 1
             back = json.loads(CATALOGUE.read_text())["capsules"][0]
             assert back["source_image"] == "https://x/1.png", back
             assert back["image"].endswith("/images/7005.20.png"), back
             assert (IMAGES / "7005.20.png").exists()
+            # a name shared by an Original and a Vertuo capsule must not be guessed at
+            CATALOGUE.write_text(scan.dumps({
+                "generated": "x", "source": "s", "market": "de", "language": "de", "count": 2,
+                "capsules": [
+                    {"sku": "7934.20", "name": "Kahawa Ya Congo", "line": "original",
+                     "image": "https://x/ol.png"},
+                    {"sku": "7061.20", "name": "Kahawa Ya Congo", "line": "vertuo",
+                     "image": "https://x/vl.png"}],
+            }))
+            ambiguous = tmp / "kahawa-ya-congo.png"
+            ambiguous.write_bytes(b"\x89PNG\r\n\x1a\n")
+            assert ingest([ambiguous]) == 0, "an ambiguous name must not be guessed at"
+            exact = tmp / "7061.20.png"
+            exact.write_bytes(b"\x89PNG\r\n\x1a\n")
+            assert ingest([exact]) == 1
+            got = {c["sku"]: c for c in json.loads(CATALOGUE.read_text())["capsules"]}
+            assert "source_image" not in got["7934.20"], got["7934.20"]
+            assert got["7061.20"]["image"].endswith("/images/7061.20.png"), got["7061.20"]
         finally:
             CATALOGUE, IMAGES = catalogue, images
     print("selftest ok")
@@ -215,6 +404,20 @@ def main() -> None:
     p_prompts.add_argument("--known", type=Path, default=STATS_CATALOGUE,
                            help="dashboard catalogue to skip (default: ../nespresso-stats/capsules.json)")
     p_prompts.add_argument("--out", type=Path, default=PROMPTS / "needs-images.md")
+    p_generate = sub.add_parser("generate", help="draw banners with the OpenAI image API")
+    p_generate.add_argument("--limit", type=int, default=2, help="how many banners to draw per line (default 2)")
+    p_generate.add_argument("--line", choices=("vertuo", "original"),
+                            help="only this line (default: both)")
+    p_generate.add_argument("--all", action="store_true",
+                            help="draw for every capsule without a banner, not just ones the dashboard lacks")
+    p_generate.add_argument("--known", type=Path, default=STATS_CATALOGUE,
+                            help="dashboard catalogue to skip (default: ../nespresso-stats/capsules.json)")
+    p_generate.add_argument("--quality", default=QUALITY)
+    p_generate.add_argument("--model", default=MODEL)
+    p_generate.add_argument("--size", default=API_SIZE,
+                            help=f"size to request from the API, scaled to 1819x865 (default {API_SIZE})")
+    p_generate.add_argument("--dry-run", action="store_true",
+                            help="list what would be drawn, without calling the API")
     p_ingest = sub.add_parser("ingest", help="install downloaded banners")
     p_ingest.add_argument("--from", dest="from_dir", type=Path, default=Path.home() / "Downloads" / "nes-pics")
     p_ingest.add_argument("--file", dest="files", type=Path, action="append", default=[])
@@ -231,6 +434,20 @@ def main() -> None:
         entries = needs_image(known, args.all)
         write_prompts(entries, args.out)
         print(f"wrote {len(entries)} prompt(s) to {args.out}")
+    elif args.command == "generate":
+        key = os.environ.get("OPENAI_API_KEY", "")
+        if not key and not args.dry_run:
+            raise SystemExit("set OPENAI_API_KEY to draw banners")
+        # the dashboard catalogue is only a cost filter, so a missing one means more work, not an error
+        known, every = (load_known(args.known), False) if args.known.exists() and not args.all else (set(), True)
+        entries = [e for e in needs_image(known, every)
+                   if not args.line or (e.get("line") or "vertuo") == args.line]
+        count = generate(entries, args.limit, key, dry_run=args.dry_run, size=args.size,
+                         quality=args.quality, model=args.model)
+        if args.dry_run:
+            print(f"{len(per_line(entries, args.limit))} of {len(entries)} capsule(s) would be drawn")
+        else:
+            print(f"installed {count} banner(s) into {IMAGES.relative_to(ROOT)}")
     elif args.command == "ingest":
         count = ingest(source_files(args.from_dir, args.files))
         print(f"installed {count} banner(s) into {IMAGES.relative_to(ROOT)}")

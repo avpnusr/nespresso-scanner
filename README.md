@@ -60,13 +60,40 @@ where the store now says `Arpeggio`), so match on `sku` or allow aliases.
 ## Images
 
 Capsule banners are AI-generated in a fixed style, one per capsule, under
-`images/<sku>.png`. `images.py` writes the ChatGPT prompts for capsules that
-still need one and installs the results — see [prompts/README.md](prompts/README.md).
+`images/<sku>.png`. `images.py` draws them with the OpenAI image API, writes the
+ChatGPT prompts for capsules that still need one, and installs the results — see
+[prompts/README.md](prompts/README.md).
+
+```bash
+OPENAI_API_KEY=sk-... python3 images.py generate --limit 2   # draw banners for new capsules
+python3 images.py generate --line original --limit 5          # catch up one line only
+python3 images.py generate --dry-run --all                   # show what it would draw
+```
+
+`--limit` counts per line, so a long Original backlog cannot keep Vertuo capsules
+without a banner for weeks: the queue is sorted by line, and two Originals a run
+would be two weeks of nothing else.
+
+Each drawing passes two reference images to the API: the line's style anchor
+(`prompts/style-vertuo.png` / `prompts/style-original.png`, carrying the series'
+scene, light and typography) and the capsule's own store photo, which carries its
+shape, colour and pattern. The API cannot return the series' 1819×865 exactly —
+width and height must both be divisible by 16, and no such size has that ratio —
+so it draws 1824×864 and the script scales that to 1819×865. That scaling is the
+only reason `generate` needs Pillow; nothing else here leaves the standard
+library.
 
 ## Refreshing
 
-`.gitea/workflows/catalogue.yml` runs `scan.py` twice a day (05:00 and 17:00 UTC)
-and commits `catalogue.json` when it changed. It can also be started by hand
-from the Actions tab. The commit step pushes with the built-in
+`.gitea/workflows/catalogue.yml` runs `scan.py` twice a day (05:00 and 17:00 UTC),
+draws a banner for up to two capsules that have none, and commits `catalogue.json`,
+`images/` and `prompts/needs-images.md` when they changed. It can also be started
+by hand from the Actions tab. The commit step pushes with the built-in
 `${{ secrets.GITEA_TOKEN }}`; the repository needs `contents: write` (set in the
 workflow) and Actions enabled.
+
+Banner drawing needs an `OPENAI_API_KEY` repository secret; without it the
+workflow skips that step. It costs real money per image, so the workflow caps the
+run at two banners per line — raise `--limit` there to work through the 41-capsule
+backlog faster. Capsules the dashboard already has its own picture for are skipped,
+like the prompt list does.
