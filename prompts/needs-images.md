@@ -1,6 +1,6 @@
 # Image generation prompts
 
-12 capsule(s) with no banner yet — generated 2026-10-15 by `images.py prompts`.
+12 capsule(s) with no banner yet — generated 2026-10-16 by `images.py prompts`.
 
 Mode: ChatGPT built-in image generation, highest quality. Final size 1819 × 865 px (wide 2.103:1).
 For each capsule, attach two reference images: the line's style anchor (under `attach`) and
