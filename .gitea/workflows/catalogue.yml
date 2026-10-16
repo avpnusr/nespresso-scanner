@@ -65,7 +65,7 @@ jobs:
           fi
           # --limit is per line: at most two Original and two Vertuo banners a run.
           # A failed drawing must not stop the catalogue scan, so it only warns.
-          python3 images.py generate --known /tmp/known.json --limit 2 \
+          python3 images.py generate --known /tmp/known.json --limit 5 \
             || echo "banner generation failed; the catalogue scan is unaffected"
 
       - name: Refresh the list of capsules still needing a banner
