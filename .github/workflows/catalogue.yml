@@ -8,7 +8,7 @@ on:
       - '.github/workflows/catalogue.yml'
   schedule:
     # twice a day, UTC
-    - cron: '0 5,17 * * *'
+    - cron: '22 5,17 * * *'
   workflow_dispatch:
     inputs:
       redraw:
