@@ -29,10 +29,10 @@ BASE = "https://www.nespresso.com"
 MARKET = "de"
 LANG = "de"
 PREFIX = f"/{MARKET}/{LANG}"
-UA = "nespresso-scanner/0.1 (+https://git.khmls.net/klein/nespresso-scanner)"
+UA = "nespresso-scanner/0.1 (+https://github.com/avpnusr/nespresso-scanner)"
 OUT = Path(__file__).resolve().parent / "catalogue.json"
 IMAGES = Path(__file__).resolve().parent / "images"
-RAW_BASE = "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main"
+RAW_BASE = "https://raw.githubusercontent.com/avpnusr/nespresso-scanner/main"
 
 # Refuse to overwrite a good catalogue with a broken haul: fewer than this many
 # capsules, or more than this share of product pages failing, is an outage, not

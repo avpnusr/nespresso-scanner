@@ -1,7 +1,7 @@
 # nespresso-scanner
 
 Scan the product catalogue from Nespresso and maintain it machine-readable in
-this repository. It exists so [nespresso-stats](../nespresso-stats) can poll
+this repository. It exists so [nespresso-stats](https://github.com/avpnusr/nespresso-stats) can poll
 which capsules Nespresso currently sells and hint at new ones.
 
 ## What it does
@@ -43,7 +43,7 @@ than 10% of product pages failing aborts the run and leaves the old file alone.
       "available": true,            // orderable right now
       "price": 0.52,
       "url": "https://www.nespresso.com/de/de/order/capsules/vertuo/...",
-      "image": "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main/images/7048.20.png",
+      "image": "https://raw.githubusercontent.com/avpnusr/nespresso-scanner/main/images/7048.20.png",
       "source_image": "https://www.nespresso.com/ecom/medias/..."
     }
   ]
@@ -90,11 +90,11 @@ library.
 
 ## Refreshing
 
-`.gitea/workflows/catalogue.yml` runs `scan.py` twice a day (05:00 and 17:00 UTC),
+`.github/workflows/catalogue.yml` runs `scan.py` twice a day (05:00 and 17:00 UTC),
 draws a banner for up to five capsules per line that have none, and commits `catalogue.json`,
 `images/` and `prompts/needs-images.md` when they changed. It can also be started
 by hand from the Actions tab. The commit step pushes with the built-in
-`${{ secrets.GITEA_TOKEN }}`; the repository needs `contents: write` (set in the
+`${{ secrets.GITHUB_TOKEN }}`; the repository needs `contents: write` (set in the
 workflow) and Actions enabled.
 
 Banner drawing needs an `OPENAI_API_KEY` repository secret; without it the

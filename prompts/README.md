@@ -11,7 +11,7 @@ Nespresso Stats; until one exists the store's own photo is used.
 OPENAI_API_KEY=sk-... python3 images.py generate --limit 2
 ```
 
-This is what the [workflow](../.gitea/workflows/catalogue.yml) runs twice a day.
+This is what the [workflow](../.github/workflows/catalogue.yml) runs twice a day.
 It draws a banner for the capsules that still have none and installs it, and skips
 capsules the dashboard already has its own picture for (`--all` ignores that, like
 `prompts --all`). `--limit` counts per line and `--line vertuo|original` narrows

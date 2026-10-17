@@ -5,7 +5,7 @@ on:
     paths:
       - 'scan.py'
       - 'images.py'
-      - '.gitea/workflows/catalogue.yml'
+      - '.github/workflows/catalogue.yml'
   schedule:
     # twice a day, UTC
     - cron: '0 5,17 * * *'
@@ -30,7 +30,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GITEA_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Scan the Nespresso catalogue
         run: |
@@ -68,7 +68,7 @@ jobs:
       - name: Commit the catalogue, banners and prompt list if they changed
         run: |
           git config user.name "nespresso-scanner"
-          git config user.email "nespresso-scanner@users.noreply.git.khmls.net"
+          git config user.email "nespresso-scanner@users.noreply.github.com"
           git add catalogue.json prompts/needs-images.md images
           if git diff --cached --quiet; then
             echo "nothing changed"

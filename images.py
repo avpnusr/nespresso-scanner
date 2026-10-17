@@ -47,7 +47,7 @@ ROOT = Path(__file__).resolve().parent
 CATALOGUE = ROOT / "catalogue.json"
 IMAGES = ROOT / "images"
 PROMPTS = ROOT / "prompts"
-RAW_BASE = "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main"
+RAW_BASE = "https://raw.githubusercontent.com/avpnusr/nespresso-scanner/main"
 
 # One style anchor per line; attach it as a reference (composition/lighting only).
 REFERENCES = {
@@ -63,7 +63,7 @@ BANNER_SIZE = (1819, 865)
 QUALITY = "high"
 MODEL = "gpt-image-2.5-sunburst"
 EDITS_URL = "https://api.openai.com/v1/images/edits"
-USER_AGENT = "nespresso-scanner/1.0 (+https://git.khmls.net/klein/nespresso-scanner)"
+USER_AGENT = "nespresso-scanner/1.0 (+https://github.com/avpnusr/nespresso-scanner)"
 
 VERTUO = (
     "Use case: ads-marketing. Generate ONE standalone high-quality premium photorealistic "
