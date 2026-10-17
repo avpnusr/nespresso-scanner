@@ -1,5 +1,12 @@
 # nespresso-scanner
 
+> **Disclaimer**
+>
+> This repository is maintained with the help of AI agents. All images in it are
+> AI generated and are **not** sourced from Nespresso. Nespresso and all related
+> product names are trademarks of their respective owners. This project is
+> unofficial and not affiliated with or endorsed by Nespresso.
+
 Scan the product catalogue from Nespresso and maintain it machine-readable in
 this repository. It exists so [nespresso-stats](https://github.com/avpnusr/nespresso-stats) can poll
 which capsules Nespresso currently sells and hint at new ones.
