@@ -43,7 +43,7 @@ than 10% of product pages failing aborts the run and leaves the old file alone.
       "available": true,            // orderable right now
       "price": 0.52,
       "url": "https://www.nespresso.com/de/de/order/capsules/vertuo/...",
-      "image": "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main/images/7048.20.png",
+      "image": "https://git.khmls.net/klein/nespresso-scanner/raw/branch/main/images/7048.20.webp",
       "source_image": "https://www.nespresso.com/ecom/medias/..."
     }
   ]
@@ -55,14 +55,14 @@ is the store's display name, which Nespresso changes from time to time — the
 dashboard's existing seed uses older names (e.g. `Ispirazione Firenze Arpeggio`
 where the store now says `Arpeggio`), so match on `sku` or allow aliases.
 `image` is the picture a client shows and is always an AI-generated banner
-(`images/<sku>.png`). `source_image` is the Nespresso store photo, kept only as a
+(`images/<sku>.webp`). `source_image` is the Nespresso store photo, kept only as a
 reference for the generator. A capsule without a generated banner yet has no
 `image` at all, so a client never falls back to a Nespresso picture.
 
 ## Images
 
 Capsule banners are AI-generated in a fixed style, one per capsule, under
-`images/<sku>.png`. `images.py` draws them with the OpenAI image API, writes the
+`images/<sku>.webp`. `images.py` draws them with the OpenAI image API, writes the
 ChatGPT prompts for capsules that still need one, and installs the results — see
 [prompts/README.md](prompts/README.md).
 
@@ -72,7 +72,7 @@ python3 images.py generate --line original --limit 5          # catch up one lin
 python3 images.py generate --dry-run                          # show what it would draw
 ```
 
-Every capsule in `catalogue.json` that has no `images/<sku>.png` yet is a
+Every capsule in `catalogue.json` that has no `images/<sku>.webp` yet is a
 candidate, regardless of what the dashboard knows.
 
 `--limit` counts per line, so a long Original backlog cannot keep Vertuo capsules
@@ -84,8 +84,10 @@ Each drawing passes two reference images to the API: the line's style anchor
 scene, light and typography) and the capsule's own store photo, which carries its
 shape, colour and pattern. The API cannot return the series' 1819×865 exactly —
 width and height must both be divisible by 16, and no such size has that ratio —
-so it draws 1824×864 and the script scales that to 1819×865. That scaling is the
-only reason `generate` needs Pillow; nothing else here leaves the standard
+so it draws 1824×864 and the script scales that to 1819×865. WebP is written at
+quality 90, about a ninth of the same banner as PNG (~2.2 MB → ~250 KB), which
+matters when a dashboard loads one per capsule. That scaling and encoding is why
+`generate` and `ingest` need Pillow; `scan.py` and everything else stays standard
 library.
 
 ## Refreshing

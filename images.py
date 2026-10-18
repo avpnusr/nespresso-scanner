@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Capsule banner images, in a fixed banner style, one 1819x865 image per
-capsule, living in `images/<sku>.png`.
+capsule, living in `images/<sku>.webp`.
 
 `catalogue.json` is machine-readable, but the dashboards want a picture per
 capsule. This script draws those banners with the OpenAI image API, writes the
 prompt batches for making them by hand in ChatGPT, and installs the results.
-Python 3 standard library only, except the `generate` command which needs
-Pillow to scale the API's output to the banner size.
+Python 3 standard library only, except `generate` and `ingest`, which need
+Pillow to scale the API's output and to encode WebP — the same banners as PNG
+were ~9x the size, which a dashboard loads once per capsule.
 
     python3 images.py generate --limit 2      # draw banners for new capsules, needs OPENAI_API_KEY
     python3 images.py generate --dry-run      # show what would be drawn, no API call
@@ -31,7 +32,6 @@ import io
 import json
 import os
 import re
-import shutil
 import tempfile
 import unicodedata
 import urllib.error
@@ -59,6 +59,9 @@ REFERENCES = {
 # nearest landscape size and `banner()` scales it down: 0.3%, invisible.
 API_SIZE = "1824x864"
 BANNER_SIZE = (1819, 865)
+# WebP at this quality is ~9% of the PNG size, with the heading text still crisp.
+WEBP_QUALITY = 90
+SUFFIX = ".webp"
 QUALITY = "high"
 MODEL = "gpt-image-2.5-sunburst"
 EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -105,7 +108,7 @@ def slug(name: str) -> str:
 
 def has_image(entry: dict) -> bool:
     sku = entry.get("sku")
-    return bool(sku) and (IMAGES / f"{sku}.png").exists()
+    return bool(sku) and (IMAGES / f"{sku}{SUFFIX}").exists()
 
 
 def store_photo(entry: dict) -> str:
@@ -350,7 +353,7 @@ def write_prompts(entries: list[dict], out: Path) -> None:
             f"<!-- store: {entry.get('url', '')}",
             f"     photo: {store_photo(entry)}",
             f"     attach: prompts/{REFERENCES.get(entry.get('line', 'vertuo'), REFERENCES['vertuo'])}",
-            f"     save as: images/{sku}.png -->",
+            f"     save as: ~/Downloads/nes-pics/{sku}.png -->",
             "",
             prompt_for(entry),
             "",
@@ -388,27 +391,26 @@ def ingest(paths: list[Path]) -> int:
             continue
         sku = entry.get("sku") or slug(entry.get("name", ""))
         IMAGES.mkdir(exist_ok=True)
-        dest = IMAGES / f"{sku}.png"
+        dest = IMAGES / f"{sku}{SUFFIX}"
         try:
             from PIL import Image
         except ImportError:
-            print(f"{src.name}: installed as-is (install Pillow to normalise the size)")
-            shutil.copyfile(src, dest)
-        else:
-            # a hand-saved banner can be a few pixels off the series size (the API path
-            # is scaled in banner()); normalise the manual path the same way
-            with Image.open(src) as image:
-                if image.size != BANNER_SIZE:
-                    print(f"{src.name}: {image.width}x{image.height} scaled to "
-                          f"{BANNER_SIZE[0]}x{BANNER_SIZE[1]}")
-                # src can be the target itself (re-normalising an installed banner), so
-                # stage the re-encode before replacing it
-                staged = dest.with_name(f".{sku}.tmp")
-                image.convert("RGB").resize(BANNER_SIZE, Image.LANCZOS).save(
-                    staged, "PNG", optimize=True)
-            staged.replace(dest)
+            raise SystemExit("installing a banner needs Pillow to write WebP: "
+                             "python3 -m pip install pillow")
+        # a hand-saved banner can be a few pixels off the series size (the API path
+        # is scaled in banner()); normalise the manual path the same way
+        with Image.open(src) as image:
+            if image.size != BANNER_SIZE:
+                print(f"{src.name}: {image.width}x{image.height} scaled to "
+                      f"{BANNER_SIZE[0]}x{BANNER_SIZE[1]}")
+            # src can be the target itself (re-normalising an installed banner), so
+            # stage the re-encode before replacing it
+            staged = dest.with_name(f".{sku}.tmp")
+            image.convert("RGB").resize(BANNER_SIZE, Image.LANCZOS).save(
+                staged, "WEBP", quality=WEBP_QUALITY, method=6)
+        staged.replace(dest)
         entry["source_image"] = store_photo(entry)
-        entry["image"] = f"{RAW_BASE}/images/{sku}.png"
+        entry["image"] = f"{RAW_BASE}/images/{sku}{SUFFIX}"
         installed += 1
     if installed:
         CATALOGUE.write_text(scan.dumps(doc))
@@ -481,16 +483,16 @@ def selftest() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             assert dominant_colour(pack.getvalue()) == (137, 184, 131)
-    # a hand-saved banner is normalised to the series size, like the API's output
+    # ingest keys a downloaded banner by sku, scales it to the series size and
+    # writes WebP, so the rest of this test needs Pillow
     try:
         from PIL import Image as pil_image
-        buf = io.BytesIO()
-        pil_image.new("RGB", (1824, 864), (137, 184, 131)).save(buf, "PNG")
-        hand_saved = buf.getvalue()
     except ImportError:
-        pil_image = None  # the no-Pillow path only copies bytes, any valid PNG will do
-        hand_saved = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+        print("selftest ok (Pillow missing: ingest checks skipped)")
+        return
+    buf = io.BytesIO()
+    pil_image.new("RGB", (1824, 864), (137, 184, 131)).save(buf, "PNG")
+    hand_saved = buf.getvalue()
     # ingest keys a downloaded banner by sku and rewrites the catalogue fields
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
@@ -508,15 +510,14 @@ def selftest() -> None:
             assert ingest([png]) == 1
             back = json.loads(CATALOGUE.read_text())["capsules"][0]
             assert back["source_image"] == "https://x/1.png", back
-            assert back["image"].endswith("/images/7005.20.png"), back
-            assert (IMAGES / "7005.20.png").exists()
-            if pil_image:
-                with pil_image.open(IMAGES / "7005.20.png") as got:
-                    assert got.size == BANNER_SIZE, got.size
-                # re-ingesting an installed banner must not truncate it
-                assert ingest([IMAGES / "7005.20.png"]) == 1
-                with pil_image.open(IMAGES / "7005.20.png") as got:
-                    assert got.size == BANNER_SIZE, got.size
+            assert back["image"].endswith("/images/7005.20.webp"), back
+            installed = IMAGES / "7005.20.webp"
+            with pil_image.open(installed) as got:
+                assert (got.format, got.size) == ("WEBP", BANNER_SIZE), (got.format, got.size)
+            # re-ingesting an installed banner must not truncate it
+            assert ingest([installed]) == 1
+            with pil_image.open(installed) as got:
+                assert got.size == BANNER_SIZE, got.size
             # a name shared by an Original and a Vertuo capsule must not be guessed at
             CATALOGUE.write_text(scan.dumps({
                 "generated": "x", "source": "s", "market": "de", "language": "de", "count": 2,
@@ -534,7 +535,7 @@ def selftest() -> None:
             assert ingest([exact]) == 1
             got = {c["sku"]: c for c in json.loads(CATALOGUE.read_text())["capsules"]}
             assert "source_image" not in got["7934.20"], got["7934.20"]
-            assert got["7061.20"]["image"].endswith("/images/7061.20.png"), got["7061.20"]
+            assert got["7061.20"]["image"].endswith("/images/7061.20.webp"), got["7061.20"]
         finally:
             CATALOGUE, IMAGES = catalogue, images
     print("selftest ok")

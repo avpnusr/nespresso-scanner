@@ -268,10 +268,10 @@ def scan(workers: int = 4) -> tuple[dict, int]:
 
     # Only a generated banner (images.py) becomes `image`; capsules without one keep no
     # `image` at all, so a client never falls back to a Nespresso store photo.
-    generated = {p.stem for p in IMAGES.glob("*.png")}
+    generated = {p.stem for p in IMAGES.glob("*.webp")}
     for entry, _ in entries.values():
         if entry["sku"] in generated:
-            entry["image"] = f"{RAW_BASE}/images/{entry['sku']}.png"
+            entry["image"] = f"{RAW_BASE}/images/{entry['sku']}.webp"
 
     capsules = sorted((e for e, _ in entries.values()), key=lambda c: (c["line"], c["family"], c["name"]))
     doc = {

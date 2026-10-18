@@ -1,6 +1,6 @@
 # Capsule banner images
 
-Every catalogue capsule can have one AI-generated banner at `images/<sku>.png`,
+Every catalogue capsule can have one AI-generated banner at `images/<sku>.webp`,
 made by `images.py generate` or by hand in ChatGPT. The dashboard polls
 `catalogue.json`, so a generated banner becomes the capsule's picture in
 Nespresso Stats; until one exists the capsule has no `image` at all (the store's
@@ -40,7 +40,7 @@ The file lists every capsule that still has no banner. Each capsule has:
 2. Paste the prompt paragraph. Use the built-in image generation at the highest
    quality the account offers.
 3. Download the result and save it as the path under `save as` (a full
-   1819×865 PNG; no resizing needed).
+   1819×865 PNG; `ingest` scales and converts it to WebP).
 
 Keep the two style anchors — `style-vertuo.png` and `style-original.png` — so
 every banner matches the existing series. The store photo is what keeps the
@@ -54,10 +54,11 @@ the drawing to the wrong shape.
 python3 images.py ingest --from ~/Downloads    # looks for files named <sku>.png
 ```
 
-It copies each file to `images/<sku>.png` (scaled to the series' 1819×865 when
-Pillow is installed) and points `catalogue.json`'s `image`
+It converts each file to `images/<sku>.webp` — scaled to the series' 1819×865,
+WebP quality 90 — and points `catalogue.json`'s `image`
 at the generated banner, keeping the store photo as `source_image`. Commit
-`images/` and `catalogue.json` together.
+`images/` and `catalogue.json` together. The WebP encode needs Pillow
+(`python3 -m pip install pillow`).
 
 Name the file after the **sku**, not the capsule name. Colombia, Kahawa Ya Congo
 and Hazelnut Brownie are each sold as an Original *and* a Vertuo capsule, and a
