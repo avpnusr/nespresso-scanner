@@ -36,6 +36,9 @@ jobs:
         run: |
           python3 scan.py --selftest
           python3 scan.py
+          # Pillow scales and encodes the banners; the repo itself stays stdlib-only
+          python3 -m pip install --quiet --break-system-packages pillow \
+            || python3 -m pip install --quiet pillow
           python3 images.py --selftest
 
       - name: Draw a banner for capsules without one
@@ -47,9 +50,6 @@ jobs:
             echo "no OPENAI_API_KEY secret; skipping banner generation"
             exit 0
           fi
-          # the generator scales the API's output to the banner size, the repo itself stays stdlib-only
-          python3 -m pip install --quiet --break-system-packages pillow \
-            || python3 -m pip install --quiet pillow
           if [ -n "$REDRAW" ]; then
             # a dispatch with `redraw` names the capsules whose banners came out wrong;
             # --sku overwrites them

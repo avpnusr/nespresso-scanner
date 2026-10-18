@@ -1,9 +1,10 @@
 # Capsule banner images
 
-Every catalogue capsule can have one AI-generated banner at `images/<sku>.png`,
+Every catalogue capsule can have one AI-generated banner at `images/<sku>.webp`,
 made by `images.py generate` or by hand in ChatGPT. The dashboard polls
 `catalogue.json`, so a generated banner becomes the capsule's picture in
-Nespresso Stats; until one exists the store's own photo is used.
+Nespresso Stats; until one exists the capsule has no `image` at all (the store's
+own photo is kept in `source_image`, never shown to a client).
 
 ## Make a batch automatically
 
@@ -12,10 +13,9 @@ OPENAI_API_KEY=sk-... python3 images.py generate --limit 2
 ```
 
 This is what the [workflow](../.github/workflows/catalogue.yml) runs twice a day.
-It draws a banner for the capsules that still have none and installs it, and skips
-capsules the dashboard already has its own picture for (`--all` ignores that, like
-`prompts --all`). `--limit` counts per line and `--line vertuo|original` narrows
-the run to one line. Each request carries two reference images: the line's style
+It draws a banner for every capsule that still has none and installs it. `--limit`
+counts per line and `--line vertuo|original` narrows the run to one line. Each
+request carries two reference images: the line's style
 anchor from `prompts/` and the capsule's own store photo. The anchors are the
 series' look — replace them only with a banner you are happy to see the whole
 line follow. Without an anchor for a line, its capsules are drawn from the store
@@ -27,9 +27,7 @@ photo alone.
 python3 images.py prompts      # writes prompts/needs-images.md
 ```
 
-The file lists every capsule that still has no banner. By default it only lists
-capsules the dashboard does not already have its own picture for (it reads
-`../nespresso-stats/capsules.json`); `--all` ignores that. Each capsule has:
+The file lists every capsule that still has no banner. Each capsule has:
 
 - `store` / `photo` — the product page and the store's own capsule photo,
 - `attach` — the line's style anchor under `prompts/` to attach as a reference,
@@ -42,7 +40,7 @@ capsules the dashboard does not already have its own picture for (it reads
 2. Paste the prompt paragraph. Use the built-in image generation at the highest
    quality the account offers.
 3. Download the result and save it as the path under `save as` (a full
-   1819×865 PNG; no resizing needed).
+   1819×865 PNG; `ingest` scales and converts it to WebP).
 
 Keep the two style anchors — `style-vertuo.png` and `style-original.png` — so
 every banner matches the existing series. The store photo is what keeps the
@@ -56,9 +54,11 @@ the drawing to the wrong shape.
 python3 images.py ingest --from ~/Downloads    # looks for files named <sku>.png
 ```
 
-It copies each file to `images/<sku>.png` and points `catalogue.json`'s `image`
+It converts each file to `images/<sku>.webp` — scaled to the series' 1819×865,
+WebP quality 90 — and points `catalogue.json`'s `image`
 at the generated banner, keeping the store photo as `source_image`. Commit
-`images/` and `catalogue.json` together.
+`images/` and `catalogue.json` together. The WebP encode needs Pillow
+(`python3 -m pip install pillow`).
 
 Name the file after the **sku**, not the capsule name. Colombia, Kahawa Ya Congo
 and Hazelnut Brownie are each sold as an Original *and* a Vertuo capsule, and a
