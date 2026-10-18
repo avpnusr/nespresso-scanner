@@ -38,7 +38,6 @@ import urllib.error
 import urllib.request
 import uuid
 import warnings
-from datetime import date
 from pathlib import Path
 
 import scan  # reuse the compact catalogue writer so the file format stays identical
@@ -186,7 +185,7 @@ def prompt_for(entry: dict, colour: tuple[int, int, int] | None = None) -> str:
     line = entry.get("line") or "vertuo"
     template = ORIGINAL if line == "original" else VERTUO
     prompt = template.format(name=(entry.get("name") or "").upper())
-    profile = (entry.get("description") or "").strip()
+    profile = (entry.get("description") or "").strip().rstrip(".")
     if profile:
         prompt += f" Flavour and origin from the Nespresso product page: {profile}"
         ingredients = (entry.get("ingredients") or "").strip()
@@ -335,8 +334,7 @@ def write_prompts(entries: list[dict], out: Path) -> None:
     lines = [
         "# Image generation prompts",
         "",
-        f"{len(entries)} capsule(s) with no banner yet \u2014 generated {date.today().isoformat()} "
-        "by `images.py prompts`.",
+        f"{len(entries)} capsule(s) with no banner yet. Written by `images.py prompts`.",
         "",
         "Mode: ChatGPT built-in image generation, highest quality. Final size 1819 \u00d7 865 px (wide 2.103:1).",
         "For each capsule, attach two reference images: the line's style anchor (under `attach`) and",
@@ -390,7 +388,25 @@ def ingest(paths: list[Path]) -> int:
             continue
         sku = entry.get("sku") or slug(entry.get("name", ""))
         IMAGES.mkdir(exist_ok=True)
-        shutil.copyfile(src, IMAGES / f"{sku}.png")
+        dest = IMAGES / f"{sku}.png"
+        try:
+            from PIL import Image
+        except ImportError:
+            print(f"{src.name}: installed as-is (install Pillow to normalise the size)")
+            shutil.copyfile(src, dest)
+        else:
+            # a hand-saved banner can be a few pixels off the series size (the API path
+            # is scaled in banner()); normalise the manual path the same way
+            with Image.open(src) as image:
+                if image.size != BANNER_SIZE:
+                    print(f"{src.name}: {image.width}x{image.height} scaled to "
+                          f"{BANNER_SIZE[0]}x{BANNER_SIZE[1]}")
+                # src can be the target itself (re-normalising an installed banner), so
+                # stage the re-encode before replacing it
+                staged = dest.with_name(f".{sku}.tmp")
+                image.convert("RGB").resize(BANNER_SIZE, Image.LANCZOS).save(
+                    staged, "PNG", optimize=True)
+            staged.replace(dest)
         entry["source_image"] = store_photo(entry)
         entry["image"] = f"{RAW_BASE}/images/{sku}.png"
         installed += 1
@@ -413,6 +429,9 @@ def selftest() -> None:
     p = prompt_for(entry)
     assert "geb\u00e4ckartigen und fruchtigen Noten" in p and "Gemahlener R\u00f6stkaffee" in p
     assert "Flavour" not in prompt_for({"name": "X", "line": "vertuo"})
+    # a description that already ends in a full stop must not get a second one
+    assert prompt_for({"name": "X", "line": "vertuo",
+                       "description": "Unverkennbar."}).endswith("Unverkennbar.")
     # …and a sampled colour pins the capsule, so the model cannot invent one from the name
     assert colour_name((0x89, 0xb8, 0x83)) == "soft sage green"
     assert colour_name((0x6b, 0x42, 0x26)) == "deep warm brown"
@@ -462,6 +481,16 @@ def selftest() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             assert dominant_colour(pack.getvalue()) == (137, 184, 131)
+    # a hand-saved banner is normalised to the series size, like the API's output
+    try:
+        from PIL import Image as pil_image
+        buf = io.BytesIO()
+        pil_image.new("RGB", (1824, 864), (137, 184, 131)).save(buf, "PNG")
+        hand_saved = buf.getvalue()
+    except ImportError:
+        pil_image = None  # the no-Pillow path only copies bytes, any valid PNG will do
+        hand_saved = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
     # ingest keys a downloaded banner by sku and rewrites the catalogue fields
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
@@ -475,12 +504,19 @@ def selftest() -> None:
                 "capsules": [dict(vertuo)],
             }))
             png = tmp / "7005.20.png"
-            png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            png.write_bytes(hand_saved)
             assert ingest([png]) == 1
             back = json.loads(CATALOGUE.read_text())["capsules"][0]
             assert back["source_image"] == "https://x/1.png", back
             assert back["image"].endswith("/images/7005.20.png"), back
             assert (IMAGES / "7005.20.png").exists()
+            if pil_image:
+                with pil_image.open(IMAGES / "7005.20.png") as got:
+                    assert got.size == BANNER_SIZE, got.size
+                # re-ingesting an installed banner must not truncate it
+                assert ingest([IMAGES / "7005.20.png"]) == 1
+                with pil_image.open(IMAGES / "7005.20.png") as got:
+                    assert got.size == BANNER_SIZE, got.size
             # a name shared by an Original and a Vertuo capsule must not be guessed at
             CATALOGUE.write_text(scan.dumps({
                 "generated": "x", "source": "s", "market": "de", "language": "de", "count": 2,
@@ -491,10 +527,10 @@ def selftest() -> None:
                      "image": "https://x/vl.png"}],
             }))
             ambiguous = tmp / "kahawa-ya-congo.png"
-            ambiguous.write_bytes(b"\x89PNG\r\n\x1a\n")
+            ambiguous.write_bytes(hand_saved)
             assert ingest([ambiguous]) == 0, "an ambiguous name must not be guessed at"
             exact = tmp / "7061.20.png"
-            exact.write_bytes(b"\x89PNG\r\n\x1a\n")
+            exact.write_bytes(hand_saved)
             assert ingest([exact]) == 1
             got = {c["sku"]: c for c in json.loads(CATALOGUE.read_text())["capsules"]}
             assert "source_image" not in got["7934.20"], got["7934.20"]

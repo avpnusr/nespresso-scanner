@@ -70,10 +70,10 @@ ChatGPT prompts for capsules that still need one, and installs the results — s
 OPENAI_API_KEY=sk-... python3 images.py generate --limit 2   # draw banners for capsules without one
 python3 images.py generate --line original --limit 5          # catch up one line only
 python3 images.py generate --dry-run                          # show what it would draw
+```
 
 Every capsule in `catalogue.json` that has no `images/<sku>.png` yet is a
 candidate, regardless of what the dashboard knows.
-```
 
 `--limit` counts per line, so a long Original backlog cannot keep Vertuo capsules
 without a banner for weeks: the queue is sorted by line, and a few Originals a run
