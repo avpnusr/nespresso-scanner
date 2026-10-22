@@ -285,11 +285,24 @@ def scan(workers: int = 4) -> tuple[dict, int]:
     return doc, errors
 
 
+# The published key order, so a single changed field stays a one-line diff: ingest()
+# writes the file too, and used to keep whatever order it had loaded from the file.
+CAPSULE_KEYS = ("sku", "name", "line", "family", "intensity", "special", "description",
+                "ingredients", "available", "price", "url", "source_image", "image")
+
+
+def ordered(capsule: dict) -> dict:
+    """A capsule with its keys in the published order (unknown keys kept at the end)."""
+    out = {k: capsule[k] for k in CAPSULE_KEYS if k in capsule}
+    out.update({k: v for k, v in capsule.items() if k not in out})
+    return out
+
+
 def dumps(doc: dict) -> str:
     """Compact: one capsule per line, so a twice-daily refresh diffs cleanly."""
     meta = {k: doc[k] for k in ("generated", "source", "market", "language", "count")}
     head = json.dumps(meta, ensure_ascii=False, indent=2)[:-1].rstrip() + ",\n"
-    body = ",\n".join("    " + json.dumps(c, ensure_ascii=False) for c in doc["capsules"])
+    body = ",\n".join("    " + json.dumps(ordered(c), ensure_ascii=False) for c in doc["capsules"])
     return head + '  "capsules": [\n' + body + "\n  ]\n}\n"
 
 
@@ -354,6 +367,12 @@ def selftest() -> None:
     assert capsule_urls('<a href="/de/de/order/capsules/vertuo/x">y</a>') == [
         f"{BASE}/de/de/order/capsules/vertuo/x"
     ]
+    # the file's key order is canonical, so a one-field change is a one-line diff
+    doc = {"generated": "x", "source": "s", "market": "de", "language": "de", "count": 1}
+    assert dumps({**doc, "capsules": [{"image": "i", "sku": "1", "name": "n"}]}) == \
+        dumps({**doc, "capsules": [{"name": "n", "sku": "1", "image": "i"}]})
+    assert '"sku": "1", "name": "n", "image": "i"' in dumps(
+        {**doc, "capsules": [{"image": "i", "name": "n", "sku": "1"}]})
     print("selftest ok")
 
 
