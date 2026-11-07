@@ -28,16 +28,21 @@ from __future__ import annotations
 
 import argparse
 import base64
+import http.client
 import io
 import json
 import os
 import re
+import sys
 import tempfile
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import warnings
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 import scan  # reuse the compact catalogue writer so the file format stays identical
@@ -46,7 +51,7 @@ ROOT = Path(__file__).resolve().parent
 CATALOGUE = ROOT / "catalogue.json"
 IMAGES = ROOT / "images"
 PROMPTS = ROOT / "prompts"
-RAW_BASE = "https://raw.githubusercontent.com/avpnusr/nespresso-scanner/main"
+RAW_BASE = scan.RAW_BASE  # one source of truth: ingest() and the scanner must agree
 
 # One style anchor per line; attach it as a reference (composition/lighting only).
 REFERENCES = {
@@ -54,9 +59,9 @@ REFERENCES = {
     "original": "style-original.png",
 }
 
-# The image API rejects the banner's own 1819x865 (width and height must both be
-# divisible by 16 and no divisible size has that exact ratio), so it draws the
-# nearest landscape size and `banner()` scales it down: 0.3%, invisible.
+# The image API rejects the banner's own 1819x865: it only accepts a fixed set of
+# sizes (width and height divisible by 16), none of which has that exact ratio, so
+# it draws the nearest landscape size and `banner()` scales it down: 0.3%, invisible.
 API_SIZE = "1824x864"
 BANNER_SIZE = (1819, 865)
 # WebP at this quality is ~9% of the PNG size, with the heading text still crisp.
@@ -64,6 +69,9 @@ WEBP_QUALITY = 90
 SUFFIX = ".webp"
 QUALITY = "high"
 MODEL = "gpt-image-2.5-sunburst"
+# A redraw names capsules explicitly, but every name is a paid drawing: cap the batch here so
+# no caller (dispatch, shell glob, script) can start an unbounded run.
+MAX_REDRAW = 10
 EDITS_URL = "https://api.openai.com/v1/images/edits"
 USER_AGENT = "nespresso-scanner/1.0 (+https://github.com/avpnusr/nespresso-scanner)"
 
@@ -112,7 +120,9 @@ def has_image(entry: dict) -> bool:
 
 
 def store_photo(entry: dict) -> str:
-    return entry.get("source_image") or entry.get("image") or ""
+    """The store's own packshot. Never the banner: that would feed the generator its own
+    output as the reference, and a banner is not a capsule photo."""
+    return entry.get("source_image") or ""
 
 
 # The image model invents a colour from the capsule's name when nothing pins it (the
@@ -160,17 +170,20 @@ def dominant_colour(png: bytes) -> tuple[int, int, int] | None:
     except ImportError:
         return None
     with Image.open(io.BytesIO(png)) as img:
-        # a bytes "transparency" is per-entry palette alpha; Pillow warns on a direct
-        # convert("RGB") and asks for RGBA, which samples the same visible pixels
-        if isinstance(img.info.get("transparency"), bytes):
+        # RGBA whenever there is alpha: converting straight to RGB keeps the invisible pixels'
+        # stored RGB, so a grey transparent background pins "silver" for every capsule
+        if "A" in img.getbands() or img.info.get("transparency") is not None:
             img = img.convert("RGBA")
-        img = img.convert("RGB")
+        else:
+            img = img.convert("RGB")
         img.thumbnail((64, 64))
         r = g = b = n = 0
         # getdata() is deprecated in Pillow 12.1, which is also where its replacement arrived
         pixels = getattr(img, "get_flattened_data", img.getdata)()
         for px in pixels:
-            if min(px) > 210 or max(px) < 35:
+            if len(px) == 4 and px[3] < 128:  # invisible
+                continue
+            if min(px[:3]) > 210 or max(px[:3]) < 35:
                 continue
             r += px[0]
             g += px[1]
@@ -204,10 +217,47 @@ def prompt_for(entry: dict, colour: tuple[int, int, int] | None = None) -> str:
     return prompt
 
 
+def _on_store(url: str) -> bool:
+    """Same origin as the store (scheme, host without a trailing dot, effective port), for a
+    redirect target or a catalogue value."""
+    if not isinstance(url, str):
+        return False
+    try:
+        wanted = urllib.parse.urlsplit(url)
+        base = urllib.parse.urlsplit(scan.BASE)
+        return bool(wanted.hostname) and _origin(wanted) == _origin(base)
+    except ValueError:  # a malformed port or host is never the store
+        return False
+
+
+def _origin(parts: urllib.parse.SplitResult) -> tuple[str, str, int]:
+    scheme = parts.scheme.lower()
+    host = (parts.hostname or "").rstrip(".").lower()
+    port = parts.port if parts.port is not None else (443 if scheme == "https" else 80)
+    return scheme, host, port
+
+
+class StoreOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    """The store photo is fetched in CI and its bytes go to the image API, so a redirect must
+    not carry that request off the store: store_url() only checked the first hop."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _on_store(newurl):
+            raise urllib.error.HTTPError(newurl, code, f"redirect off the store: {newurl}",
+                                          headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+STORE_OPENER = urllib.request.build_opener(StoreOnlyRedirects)
+
+
 def fetch(url: str) -> bytes:
     """Download a store photo (the CDN wants a user agent)."""
+    if not _on_store(url):
+        # catalogue values are untrusted input too, not only what scan.py just wrote
+        raise ValueError(f"not a store url: {url}")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with STORE_OPENER.open(request, timeout=180) as response:
         return response.read()
 
 
@@ -247,9 +297,15 @@ def edit(prompt: str, files: list[tuple[str, bytes]], key: str, size: str = API_
         with urllib.request.urlopen(request, timeout=900) as response:
             doc = json.load(response)
     except urllib.error.HTTPError as exc:
-        raise SystemExit(f"image API refused the request ({exc.code}): {exc.read().decode()[:400]}")
-    print(f"  {doc.get('usage', {}).get('total_tokens', '?')} tokens")
-    return base64.b64decode(doc["data"][0]["b64_json"])
+        raise RuntimeError(f"image API refused the request ({exc.code}): {exc.read().decode()[:400]}")
+    try:
+        image = base64.b64decode(doc["data"][0]["b64_json"])
+        usage = (doc.get("usage") or {}).get("total_tokens", "?")
+    except (AttributeError, IndexError, KeyError, TypeError) as exc:
+        # a 200 without an image is this capsule's failure, not a reason to stop the queue
+        raise RuntimeError(f"image API returned no image ({type(exc).__name__})")
+    print(f"  {usage} tokens")
+    return image
 
 
 def banner(png: bytes) -> bytes:
@@ -301,36 +357,86 @@ def generate(entries: list[dict], limit: int, key: str, *, dry_run: bool = False
             import PIL  # noqa: F401  only the generator needs it
         except ImportError:
             raise SystemExit("drawing banners needs Pillow: python3 -m pip install pillow")
-    installed = 0
+    installed = failed = no_photo = would = 0
     for entry in per_line(entries, limit):
+        sku, name = entry.get("sku"), entry.get("name")
+        if not store_photo(entry):
+            # the anchor carries the series' style, not the capsule: drawn from it alone, the
+            # banner invents shape and colour and then stays published as the capsule's picture
+            print(f"{sku}  {name}: no store photo; skipped")
+            continue
         try:
             files = references(entry)
-        except (urllib.error.URLError, OSError) as exc:  # dead store photo: skip this capsule, keep going
-            print(f"{entry.get('sku')}  {entry.get('name')}: store photo unavailable ({exc}); skipped")
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
+            # a dead store photo costs no API call: one is that capsule's bad luck, but three with
+            # nothing drawn means the CDN or the allowlist broke, so count them apart
+            print(f"{sku}  {name}: store photo unavailable ({exc}); skipped")
+            failed += 1
+            no_photo += 1
             continue
-        print(f"{entry.get('sku')}  {entry.get('name')}  ({len(files)} reference(s))")
-        store = next((data for name, data in files if name == "store.png"), None)
-        colour = dominant_colour(store) if store else None
-        if colour:
-            print(f"  colour pin: #{colour[0]:02x}{colour[1]:02x}{colour[2]:02x} {colour_name(colour)}")
-        if dry_run:
-            continue
-        if not files:
-            print("  no reference images; skipped")
-            continue
-        # ingest() keys a banner by its file name, so stage it as <sku>.png
-        staged = Path(tempfile.mkdtemp()) / f"{entry['sku']}.png"
-        staged.write_bytes(banner(edit(prompt_for(entry, colour), files, key, size, quality, model)))
-        installed += ingest([staged])
-    return installed
+        try:
+            store = next((data for filename, data in files if filename == "store.png"), None)
+            colour = dominant_colour(store) if store else None
+            print(f"{sku}  {name}  ({len(files)} reference(s))")
+            if colour:
+                print(f"  colour pin: #{colour[0]:02x}{colour[1]:02x}{colour[2]:02x} {colour_name(colour)}")
+            if dry_run:
+                would += 1
+                continue
+            # ingest() keys a banner by its file name, so stage it as <sku>.png; the temp dir is
+            # per capsule and removed with it, or every drawing leaves a full-size PNG behind
+            with tempfile.TemporaryDirectory() as tmp:
+                staged = Path(tmp) / f"{sku}.png"
+                staged.write_bytes(banner(edit(prompt_for(entry, colour), files, key, size, quality, model)))
+                if ingest([staged]):
+                    installed += 1
+                else:  # drawn and paid for, but nothing installed it: a broken catalogue or images/
+                    failed += 1
+        except (urllib.error.URLError, OSError, ValueError, KeyError, RuntimeError,
+                http.client.HTTPException) as exc:
+            # a dead photo or a refused drawing is this capsule's problem, not the run's: the
+            # queue is sorted by line, so aborting here would starve every capsule after it
+            print(f"{sku}  {name}: {exc}; skipped")
+            failed += 1
+    # a refused drawing or an install that did nothing means the pipeline is broken, not one
+    # capsule; photos are different, so it takes several before blaming the store
+    if not installed and not dry_run and (failed > no_photo or no_photo >= 3):
+        raise SystemExit(f"no banner was drawn ({failed} failed, {no_photo} without a photo)"
+                         " — the pipeline, not one capsule")
+    return would if dry_run else installed
+
+
+def own_descriptions(entries: list[dict], doc: dict) -> list[dict]:
+    """Drop a description that several capsules share: that is a range blurb, not this
+    capsule's taste text, and in a prompt it steers every banner in the range the same way."""
+    counts = Counter((c.get("description") or "").strip() for c in doc["capsules"])
+    shared = {d for d, n in counts.items() if d and n > 1}
+    return [dict(e, description="") if (e.get("description") or "").strip() in shared else e
+            for e in entries]
 
 
 def needs_image() -> list[dict]:
     doc = json.loads(CATALOGUE.read_text())
-    return sorted(
-        (e for e in doc["capsules"] if e.get("available", True) and not has_image(e)),
-        key=lambda e: (e.get("line", ""), e.get("name", "")),
-    )
+    queue = [e for e in doc["capsules"]
+             # a capsule with no store photo cannot be drawn (the anchor alone invents it), so it
+             # must not hold a queue slot or sit in the backlog file forever
+             if e.get("available", True) and not has_image(e) and store_photo(e)]
+    return sorted(own_descriptions(queue, doc),
+                  key=lambda e: (e.get("line", ""), e.get("name", "")))
+
+
+def markdown_safe(text: str) -> str:
+    """Store text lands in a committed file that Gitea renders: a literal --> in it would close
+    the comment early, and [![](...)](...) would fetch a remote picture when the file is viewed."""
+    return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace("[", "&#91;").replace("]", "&#93;").replace("!", "&#33;")
+            .replace("|", "&#124;").replace("`", "&#96;"))
+
+
+def comment_safe(text: str) -> str:
+    """Inside the HTML comment only a literal > can do harm; escaping more would wreck a URL
+    someone copies out of it (?a=1&amp;b=2)."""
+    return text.replace(">", "&gt;")
 
 
 def write_prompts(entries: list[dict], out: Path) -> None:
@@ -348,18 +454,25 @@ def write_prompts(entries: list[dict], out: Path) -> None:
     for entry in entries:
         sku = entry.get("sku") or slug(entry.get("name", ""))
         lines += [
-            f"## {entry.get('name')} \u00b7 {entry.get('line', '')} \u00b7 {entry.get('family', '')}",
+            f"## {markdown_safe(entry.get('name') or '')} \u00b7 {markdown_safe(entry.get('line') or '')}"
+            f" \u00b7 {markdown_safe(entry.get('family') or '')}",
             "",
-            f"<!-- store: {entry.get('url', '')}",
-            f"     photo: {store_photo(entry)}",
-            f"     attach: prompts/{REFERENCES.get(entry.get('line', 'vertuo'), REFERENCES['vertuo'])}",
-            f"     save as: ~/Downloads/nes-pics/{sku}.png -->",
+            f"<!-- store: {comment_safe(entry.get('url') or '')}",
+            f"     photo: {comment_safe(store_photo(entry))}",
+            f"     attach: prompts/{REFERENCES.get(entry.get('line') or 'vertuo', REFERENCES['vertuo'])}",
+            f"     save as: ~/Downloads/nes-pics/{comment_safe(sku)}.png -->",
             "",
-            prompt_for(entry),
+            "````text",
+            # a closing fence has to start a line, so store text cannot end the block
+            prompt_for(entry).replace("\r", " ").replace("\n", " "),
+            "````",
             "",
         ]
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(lines))
+    # atomic: a failure mid-write must not leave a truncated prompt list for the commit
+    staged = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    staged.write_text("\n".join(lines))
+    os.replace(staged, out)
 
 
 def source_files(from_dir: Path | None, files: list[Path]) -> list[Path]:
@@ -399,31 +512,101 @@ def ingest(paths: list[Path]) -> int:
                              "python3 -m pip install pillow")
         # a hand-saved banner can be a few pixels off the series size (the API path
         # is scaled in banner()); normalise the manual path the same way
-        with Image.open(src) as image:
-            if image.size != BANNER_SIZE:
-                print(f"{src.name}: {image.width}x{image.height} scaled to "
-                      f"{BANNER_SIZE[0]}x{BANNER_SIZE[1]}")
-            # src can be the target itself (re-normalising an installed banner), so
-            # stage the re-encode before replacing it
-            staged = dest.with_name(f".{sku}.tmp")
-            image.convert("RGB").resize(BANNER_SIZE, Image.LANCZOS).save(
-                staged, "WEBP", quality=WEBP_QUALITY, method=6)
-        staged.replace(dest)
-        entry["source_image"] = store_photo(entry)
+        # src can be the target itself (re-normalising an installed banner), so
+        # stage the re-encode before replacing it
+        staged = dest.with_name(f".{sku}.tmp")
+        try:
+            with Image.open(src) as image:
+                if image.size != BANNER_SIZE:
+                    print(f"{src.name}: {image.width}x{image.height} scaled to "
+                          f"{BANNER_SIZE[0]}x{BANNER_SIZE[1]}")
+                image.convert("RGB").resize(BANNER_SIZE, Image.LANCZOS).save(
+                    staged, "WEBP", quality=WEBP_QUALITY, method=6)
+            staged.replace(dest)
+        except (OSError, Image.DecompressionBombError) as exc:  # unreadable, or a decompression bomb
+            # one broken file must not abort the batch after earlier banners were replaced and
+            # before catalogue.json is saved, which would leave images/ ahead of the catalogue
+            print(f"skip {src.name}: {exc}")
+            staged.unlink(missing_ok=True)
+            continue
         entry["image"] = f"{RAW_BASE}/images/{sku}{SUFFIX}"
         installed += 1
     if installed:
-        CATALOGUE.write_text(scan.dumps(doc))
+        # this edit is a catalogue change, so the published timestamp has to follow it
+        doc["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        scan.save(doc, CATALOGUE)
     return installed
 
 
 def selftest() -> None:
     assert slug("Il Caff\u00e8") == "il-caffe"
     assert slug("Double Espresso Chiaro Decaffeinato") == "double-espresso-chiaro-decaffeinato"
-    vertuo = {"sku": "7005.20", "name": "Melozio", "line": "vertuo", "family": "Mug", "image": "https://x/1.png"}
+    vertuo = {"sku": "7005.20", "name": "Melozio", "line": "vertuo", "family": "Mug",
+              "image": "https://x/1.png", "source_image": "https://x/store.png"}
     original = {"sku": "7928.20", "name": "Arpeggio", "line": "original", "family": "Espresso"}
     assert "MELOZIO" in prompt_for(vertuo) and "VERTUO" in prompt_for(vertuo)
     assert "ORIGINAL" in prompt_for(original) and "truncated-cone" in prompt_for(original)
+    # a banner must never become its own store photo reference
+    assert store_photo({"image": "https://x/banner.webp"}) == ""
+    assert store_photo({"source_image": "https://x/s.png", "image": "https://x/b.png"}) \
+        == "https://x/s.png"
+    # a redirect off the store must be refused; one on the store must still be followed
+    try:
+        fetch("https://evil.example/x")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("fetch must refuse an off-store url before any request")
+    try:
+        StoreOnlyRedirects().redirect_request(None, None, 302, "", {}, "https://evil.example/x")
+    except urllib.error.HTTPError:
+        pass
+    else:
+        raise AssertionError("an off-store redirect must be refused")
+    on_store = StoreOnlyRedirects().redirect_request(
+        urllib.request.Request(f"{scan.BASE}/a"), None, 302, "", {},
+        f"{scan.BASE}/de/de/ecom/medias/x.png")
+    assert on_store is not None and on_store.full_url.endswith("x.png"), \
+        "a redirect on the store must still be followed"
+    assert _on_store(f"{scan.BASE}/x"), "a store path is on the store"
+    assert not _on_store("http" + scan.BASE[len("https"):] + "/x"), "a scheme downgrade is not"
+    # the same origin written differently is still the store
+    assert _on_store("https://WWW.NESPRESSO.COM/x"), "host case does not matter"
+    assert _on_store("https://www.nespresso.com:443/x"), "the default port does not matter"
+    assert _on_store("https://www.nespresso.com./x"), "a trailing dot does not matter"
+    assert not _on_store("https://www.nespresso.com:8443/x"), "another port is not the store"
+    assert not _on_store("https://www.nespresso.com:0/x"), "port 0 is not the default port"
+    assert not _on_store({"url": f"{scan.BASE}/x"}), "a non-string value is never the store"
+
+    # fetch() must go through that opener, not plain urlopen
+    class _StubOpener:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def open(self, request, timeout=None):
+            self.calls.append(request.full_url)
+            raise urllib.error.URLError("stub")
+
+    global STORE_OPENER
+    real_opener, stub = STORE_OPENER, _StubOpener()
+    STORE_OPENER = stub
+    try:
+        try:
+            fetch(f"{scan.BASE}/x.png")
+        except urllib.error.URLError:
+            pass
+    finally:
+        STORE_OPENER = real_opener
+    assert stub.calls == [f"{scan.BASE}/x.png"], stub.calls
+    # a description several capsules share is a range blurb: it must not steer their prompts
+    doc = {"capsules": [
+        {"sku": "1", "description": "Kakao- und Gew\u00fcrznoten."},
+        {"sku": "2", "description": "Kakao- und Gew\u00fcrznoten."},
+        {"sku": "3", "description": "Zitrusnote mit Limette."},
+        {"sku": "4", "description": ""},
+    ]}
+    mine = own_descriptions(doc["capsules"], doc)
+    assert [e["description"] for e in mine] == ["", "", "Zitrusnote mit Limette.", ""], mine
     # the taste and ingredient text from the product page steers the scene…
     entry = {"name": "Crystal Spark", "line": "vertuo",
              "description": "geb\u00e4ckartigen und fruchtigen Noten",
@@ -483,6 +666,15 @@ def selftest() -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             assert dominant_colour(pack.getvalue()) == (137, 184, 131)
+        # an RGBA packshot must not average in its transparent background; grey is chosen so the
+        # white/black filters alone would let it through
+        rgba = Image.new("RGBA", (64, 64), (200, 200, 200, 0))
+        for x in range(16, 48):
+            for y in range(8, 56):
+                rgba.putpixel((x, y), (137, 184, 131, 255))
+        pack = io.BytesIO()
+        rgba.save(pack, "PNG")
+        assert dominant_colour(pack.getvalue()) == (137, 184, 131), dominant_colour(pack.getvalue())
     # ingest keys a downloaded banner by sku, scales it to the series size and
     # writes WebP, so the rest of this test needs Pillow
     try:
@@ -497,7 +689,7 @@ def selftest() -> None:
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        global CATALOGUE, IMAGES
+        global CATALOGUE, IMAGES, edit, references
         catalogue, images = CATALOGUE, IMAGES
         try:
             CATALOGUE, IMAGES = tmp / "catalogue.json", tmp / "images"
@@ -509,7 +701,7 @@ def selftest() -> None:
             png.write_bytes(hand_saved)
             assert ingest([png]) == 1
             back = json.loads(CATALOGUE.read_text())["capsules"][0]
-            assert back["source_image"] == "https://x/1.png", back
+            assert back["source_image"] == "https://x/store.png", back
             assert back["image"].endswith("/images/7005.20.webp"), back
             installed = IMAGES / "7005.20.webp"
             with pil_image.open(installed) as got:
@@ -536,6 +728,164 @@ def selftest() -> None:
             got = {c["sku"]: c for c in json.loads(CATALOGUE.read_text())["capsules"]}
             assert "source_image" not in got["7934.20"], got["7934.20"]
             assert got["7061.20"]["image"].endswith("/images/7061.20.webp"), got["7061.20"]
+            # the banner must never become its own "store photo" reference
+            assert "source_image" not in got["7061.20"], got["7061.20"]
+            # one refused drawing must not stop the queue: the capsule after it still installs
+            real_edit, real_references = edit, references
+
+            def fake_edit(prompt, files, key, size, quality, model):
+                if "REFUSE" in prompt:
+                    raise RuntimeError("image API refused the request (400)")
+                return hand_saved
+
+            edit = fake_edit
+            references = lambda entry: [("store.png", hand_saved)]
+            try:
+                assert generate([
+                    {"sku": "7934.20", "name": "REFUSE", "line": "original",
+                     "source_image": "https://x/s.png"},
+                    {"sku": "7061.20", "name": "OK", "line": "vertuo",
+                     "source_image": "https://x/s.png"}], 2, "k") == 1
+                # a pipeline that draws nothing must fail loudly, not report "installed 0"
+                try:
+                    generate([{"sku": f"793{i}.20", "name": "REFUSE", "line": "original",
+                               "source_image": "https://x/s.png"} for i in range(3)], 3, "k")
+                except SystemExit:
+                    pass
+                else:
+                    raise AssertionError("an all-failed run must not exit 0")
+                # drawn but not installable (a sku the catalogue does not know) is a failure too,
+                # not a silent no-op that pays for a banner and drops it
+                try:
+                    generate([{"sku": "7999.20", "name": "OK", "line": "vertuo",
+                               "source_image": "https://x/s.png"}], 1, "k")
+                except SystemExit:
+                    pass
+                else:
+                    raise AssertionError("a drawn-but-not-installed banner must not exit 0")
+            finally:
+                edit, references = real_edit, real_references
+            # a capsule with no store photo cannot be drawn, so it never holds a queue slot
+            CATALOGUE.write_text(scan.dumps({
+                "generated": "x", "source": "s", "market": "de", "language": "de", "count": 2,
+                "capsules": [
+                    {"sku": "7101.20", "name": "A", "line": "vertuo",
+                     "source_image": "https://x/s.png"},
+                    {"sku": "7102.20", "name": "B", "line": "vertuo"},
+                    {"sku": "7103.20", "name": "C", "line": "vertuo", "available": False,
+                     "source_image": "https://x/s.png"}],
+            }))
+            assert [e["sku"] for e in needs_image()] == ["7101.20"], needs_image()
+            # a shared description must be blanked where the queue is actually built too
+            CATALOGUE.write_text(scan.dumps({
+                "generated": "x", "source": "s", "market": "de", "language": "de", "count": 2,
+                "capsules": [
+                    {"sku": "7101.20", "name": "A", "line": "vertuo", "available": True,
+                     "source_image": "https://x/s.png", "description": "Kakao- und Gew\u00fcrznoten."},
+                    {"sku": "7102.20", "name": "B", "line": "vertuo", "available": True,
+                     "source_image": "https://x/s.png", "description": "Kakao- und Gew\u00fcrznoten."}],
+            }))
+            assert [e["description"] for e in needs_image()] == ["", ""], needs_image()
+            # a dry run counts what it would really draw, not the queue it was handed
+            real_references = references
+            try:
+                references = lambda entry: [("store.png", hand_saved)]
+                assert generate([{"sku": "7101.20", "line": "vertuo",
+                                  "source_image": "https://x/s.png"}], 1, "k", dry_run=True) == 1
+
+                def dead(entry):
+                    raise urllib.error.URLError("404")
+
+                references = dead
+                assert generate([{"sku": "7101.20", "line": "vertuo",
+                                  "source_image": "https://x/s.png"}], 1, "k", dry_run=True) == 0
+                # one dead photo is that capsule's problem, not a broken pipeline
+                assert generate([{"sku": "7101.20", "line": "vertuo",
+                                  "source_image": "https://x/s.png"}], 1, "k") == 0
+                # three with nothing drawn is the store or the API
+                try:
+                    generate([{"sku": f"71{i}1.20", "line": "vertuo",
+                               "source_image": "https://x/s.png"} for i in range(3)], 3, "k")
+                except SystemExit:
+                    pass
+                else:
+                    raise AssertionError("three dead photos and nothing drawn must not exit 0")
+            finally:
+                references = real_references
+            # store text cannot close the HTML comment or render a remote image in Gitea
+            md = tmp / "needs.md"
+            write_prompts([{"sku": "7151.20--><b>", "name": "A ![x](http://evil/p.gif)",
+                            "line": "vertuo", "family": "Mug",
+                            "url": "https://www.nespresso.com/x--><img src=//evil/p.gif>",
+                            "source_image": "https://x/s.png",
+                            "description": "Fruity\n````\n![](http://evil/p.gif)\n````text"}], md)
+            text = md.read_text()
+            header = text.split("````text")[0]
+            assert header.count("-->") == 1, header  # only our own comment may close
+            assert "![x](" not in header and "![](http" not in header, header
+            assert "<b>" not in header, header
+            body = text.split("````text", 1)[1]
+            # only a line that *starts* with the fence closes it, so nothing a store page writes
+            # may occupy a line start except our own closer
+            closed = [line for line in body.splitlines() if line.startswith("````")]
+            assert closed == ["````"], closed
+            # one unreadable file must not abort an ingest batch after earlier banners were
+            # replaced and before catalogue.json is saved
+            broken = tmp / "7101.20.png"
+            broken.write_bytes(b"not a png")
+            good = tmp / "7102.20.png"
+            good.write_bytes(hand_saved)
+            assert ingest([broken, good]) == 1, "an unreadable file must be skipped, not fatal"
+            assert not list(IMAGES.glob(".*.tmp")), "a skipped file must leave no staged tmp"
+            # a redraw is one paid drawing per name: unknown or too many names must fail first
+            real_argv, real_key = sys.argv, os.environ.get("OPENAI_API_KEY")
+            os.environ["OPENAI_API_KEY"] = "sk-test"
+            too_many = ["images.py", "generate", "--dry-run"] + [
+                f"--sku=7{i}0.20" for i in range(MAX_REDRAW + 1)]
+            try:
+                for argv, expected in ((["images.py", "generate", "--sku", "nope", "--dry-run"],
+                                        "unknown sku"), (too_many, "at most")):
+                    sys.argv = argv
+                    try:
+                        main()
+                    except SystemExit as exc:
+                        assert expected in str(exc), (expected, exc)
+                    else:
+                        raise AssertionError(f"{argv[1:]} must fail before any paid call")
+            finally:
+                sys.argv = real_argv
+                if real_key is None:
+                    os.environ.pop("OPENAI_API_KEY", None)
+                else:
+                    os.environ["OPENAI_API_KEY"] = real_key
+            # an empty queue, or one whose only capsule has no photo, is not a broken pipeline
+            assert generate([], 0, "k") == 0
+            assert generate([{"sku": "7102.20", "line": "vertuo"}], 1, "k") == 0
+            # and the real edit() must turn a bad payload or a refusal into RuntimeError, so the
+            # queue survives it: the fake above never exercises that conversion
+            real_urlopen = urllib.request.urlopen
+            try:
+                for payload in (b'{"data": []}', b'{"error": "x"}', b'"nope"'):
+                    urllib.request.urlopen = lambda *a, _p=payload, **k: io.BytesIO(_p)
+                    try:
+                        edit("p", [("store.png", hand_saved)], "k")
+                    except RuntimeError:
+                        pass
+                    else:
+                        raise AssertionError(f"{payload!r} must raise RuntimeError")
+
+                def refuse(*args, **kwargs):
+                    raise urllib.error.HTTPError("u", 400, "no", {}, io.BytesIO(b"bad prompt"))
+
+                urllib.request.urlopen = refuse
+                try:
+                    edit("p", [("store.png", hand_saved)], "k")
+                except RuntimeError:
+                    pass
+                else:
+                    raise AssertionError("an HTTP refusal must raise RuntimeError")
+            finally:
+                urllib.request.urlopen = real_urlopen
         finally:
             CATALOGUE, IMAGES = catalogue, images
     print("selftest ok")
@@ -578,8 +928,14 @@ def main() -> None:
             raise SystemExit("set OPENAI_API_KEY to draw banners")
         if args.sku:
             wanted = set(args.sku)
-            entries = [e for e in json.loads(CATALOGUE.read_text())["capsules"]
-                       if e.get("sku") in wanted]
+            if len(wanted) > MAX_REDRAW:
+                raise SystemExit(f"{len(wanted)} sku(s) named; at most {MAX_REDRAW} per redraw")
+            doc = json.loads(CATALOGUE.read_text())
+            entries = own_descriptions([e for e in doc["capsules"] if e.get("sku") in wanted], doc)
+            # a mistyped or shell-expanded sku used to redraw nothing and exit 0
+            missing = wanted - {e["sku"] for e in entries}
+            if missing:
+                raise SystemExit(f"unknown sku(s): {' '.join(sorted(missing))}")
             limit = len(entries)  # --sku names exactly what to (re)draw, no per-line cap
         else:
             entries = [e for e in needs_image()
@@ -588,12 +944,19 @@ def main() -> None:
         count = generate(entries, limit, key, dry_run=args.dry_run, size=args.size,
                          quality=args.quality, model=args.model)
         if args.dry_run:
-            print(f"{len(per_line(entries, limit))} of {len(entries)} capsule(s) would be drawn")
+            print(f"{count} of {len(entries)} capsule(s) would be drawn")
         else:
             print(f"installed {count} banner(s) into {IMAGES.relative_to(ROOT)}")
+            if args.sku and count < len(entries):
+                # a redraw that silently drew nothing is how a banner that came out wrong stays
+                raise SystemExit(f"{len(entries) - count} of {len(entries)} named capsule(s) were not drawn")
     elif args.command == "ingest":
-        count = ingest(source_files(args.from_dir, args.files))
+        paths = source_files(args.from_dir, args.files)
+        count = ingest(paths)
         print(f"installed {count} banner(s) into {IMAGES.relative_to(ROOT)}")
+        if paths and not count:
+            # every file unreadable or matching no sku is not a success
+            raise SystemExit("nothing installed: every file was unreadable or matched no sku")
     else:
         parser.print_help()
 

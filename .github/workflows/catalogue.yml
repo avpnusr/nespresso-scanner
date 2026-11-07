@@ -2,6 +2,8 @@ name: catalogue
 
 on:
   push:
+    # a feature branch must not spend the image key and push banners main cannot see
+    branches: [main]
     paths:
       - 'scan.py'
       - 'images.py'
@@ -13,6 +15,10 @@ on:
     inputs:
       redraw:
         description: 'Space-separated SKUs whose banners to redraw (e.g. "7429.20 7200.20")'
+        required: false
+        default: ''
+      accept_loss:
+        description: 'Type yes to write even when more than 20% of the known capsules have vanished (a bulk store change)'
         required: false
         default: ''
 
@@ -31,15 +37,26 @@ jobs:
         uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # a run that waited in the queue must start from the branch tip, or it redraws (and
+          # pays for) the banners the run ahead of it just pushed
+          ref: ${{ github.ref_name }}
 
       - name: Scan the Nespresso catalogue
+        env:
+          ACCEPT_LOSS: ${{ github.event.inputs.accept_loss }}
         run: |
           python3 scan.py --selftest
-          python3 scan.py
-          # Pillow scales and encodes the banners; the repo itself stays stdlib-only
+          # Pillow scales and encodes the banners; the repo itself stays stdlib-only. Install it
+          # before the scan writes, so a pip hiccup cannot discard a haul the scan already wrote.
           python3 -m pip install --quiet --break-system-packages pillow \
-            || python3 -m pip install --quiet pillow
+            || python3 -m pip install --quiet pillow \
+            || echo "::warning::Pillow install failed; banner drawing will be skipped"
           python3 images.py --selftest
+          if [ "$ACCEPT_LOSS" = "yes" ]; then
+            python3 scan.py --accept-loss
+          else
+            python3 scan.py
+          fi
 
       - name: Draw a banner for capsules without one
         env:
@@ -51,19 +68,20 @@ jobs:
             exit 0
           fi
           if [ -n "$REDRAW" ]; then
-            # a dispatch with `redraw` names the capsules whose banners came out wrong;
-            # --sku overwrites them
-            python3 images.py generate $(printf -- '--sku %s ' $REDRAW) \
-              || echo "redraw failed; the catalogue scan is unaffected"
+            # a dispatch with `redraw` names the capsules whose banners came out wrong; --sku
+            # overwrites them, and images.py caps the batch at MAX_REDRAW paid drawings.
+            set -- $REDRAW
+            python3 images.py generate $(printf -- '--sku %s ' "$@") \
+              || echo "::warning::redraw failed; the catalogue scan is unaffected"
             exit 0
           fi
           # --limit is per line: at most five Original and five Vertuo banners a run.
-          # A failed drawing must not stop the catalogue scan, so it only warns.
+          # A failed drawing must not stop the catalogue scan, so it only warns -- visibly.
           python3 images.py generate --limit 5 \
-            || echo "banner generation failed; the catalogue scan is unaffected"
+            || echo "::warning::banner generation failed; the catalogue scan is unaffected"
 
       - name: Refresh the list of capsules still needing a banner
-        run: python3 images.py prompts
+        run: python3 images.py prompts || echo "::warning::could not refresh prompts/needs-images.md"
 
       - name: Commit the catalogue, banners and prompt list if they changed
         run: |
@@ -75,4 +93,23 @@ jobs:
             exit 0
           fi
           git commit -m "catalogue: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push
+          # a human push during the scan leaves this checkout behind: without a rebase the push
+          # is rejected and this run's catalogue and freshly paid banners are lost. During a
+          # rebase "theirs" is the commit being replayed, so -X theirs keeps this run's
+          # catalogue/images over the older human push. --onto replays only this run's own
+          # commit, so a human force-push that rewrote an earlier commit is not undone.
+          branch="${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}"
+          git fetch origin "$branch"
+          if ! git rebase -X theirs --onto "origin/$branch" HEAD~1; then
+            # a conflict we cannot resolve must not throw away banners we paid for: park the
+            # commit where a human can pick it up, then fail visibly
+            git rebase --abort || true
+            parked="refs/heads/nespresso-scanner/recovery-$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_ID:-$$}"
+            if git push origin "HEAD:$parked"; then
+              echo "::error::could not rebase onto origin/$branch; the run commit is parked on $parked"
+            else
+              echo "::error::could not rebase onto origin/$branch and could not park the run commit"
+            fi
+            exit 1
+          fi
+          git push origin "HEAD:$branch"

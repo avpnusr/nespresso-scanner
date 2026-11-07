@@ -13,7 +13,8 @@ OPENAI_API_KEY=sk-... python3 images.py generate --limit 2
 ```
 
 This is what the [workflow](../.github/workflows/catalogue.yml) runs twice a day.
-It draws a banner for every capsule that still has none and installs it. `--limit`
+It draws a banner for up to `--limit` capsules per line that still have none and
+can be drawn — in stock, with a store photo — and installs it. `--limit`
 counts per line and `--line vertuo|original` narrows the run to one line. Each
 request carries two reference images: the line's style
 anchor from `prompts/` and the capsule's own store photo. The anchors are the
@@ -27,7 +28,8 @@ photo alone.
 python3 images.py prompts      # writes prompts/needs-images.md
 ```
 
-The file lists every capsule that still has no banner. Each capsule has:
+The file lists every capsule that still has no banner and can be drawn — in
+stock, with a store photo. Each capsule has:
 
 - `store` / `photo` — the product page and the store's own capsule photo,
 - `attach` — the line's style anchor under `prompts/` to attach as a reference,
@@ -51,7 +53,7 @@ the drawing to the wrong shape.
 ## Install
 
 ```bash
-python3 images.py ingest --from ~/Downloads    # looks for files named <sku>.png
+python3 images.py ingest --from ~/Downloads/nes-pics   # looks for files named <sku>.png
 ```
 
 It converts each file to `images/<sku>.webp` — scaled to the series' 1819×865,
@@ -61,10 +63,12 @@ at the generated banner, keeping the store photo as `source_image`. Commit
 (`python3 -m pip install pillow`).
 
 Name the file after the **sku**, not the capsule name. Colombia, Kahawa Ya Congo
-and Hazelnut Brownie are each sold as an Original *and* a Vertuo capsule, and a
-file named after one of those is refused rather than matched to whichever capsule
-came first — that is how three Vertuo banners ended up on the Original skus.
+and Hazelnut Brownie Flavoured Coffee are each sold as an Original *and* a Vertuo
+capsule, and a file named after one of those is refused rather than matched to
+whichever capsule came first — that is how three Vertuo banners ended up on the
+Original skus.
 
-`scan.py` re-derives `image`/`source_image` from `images/` on every scan, so the
-banner survives the twice-daily refresh, and a capsule keeps its banner when the
-store renames it because the file is keyed by sku.
+`scan.py` re-derives `image` from `images/` on every scan (`source_image` comes
+from the product page), so the banner survives the twice-daily refresh, and a
+capsule keeps its banner when the store renames it because the file is keyed by
+sku.
